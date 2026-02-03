@@ -1,20 +1,39 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-    port: process.env.SMTP_PORT || 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USER || 'ethereal_user',
-        pass: process.env.SMTP_PASS || 'ethereal_pass',
-    },
-});
+// Check if SMTP credentials are provided
+const isSMTPConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+
+let transporter = null;
+
+if (isSMTPConfigured) {
+    transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT || 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+        },
+    });
+} else {
+    console.warn("⚠️ SMTP Config missing. Emails will NOT be sent. OTPs will be logged to console.");
+}
 
 exports.sendOTP = async (email, otp) => {
+    // Always log for development so you aren't stuck if email fails
+    console.log(`\n==================================================`);
+    console.log(`🔐 OTP for ${email}: ${otp}`);
+    console.log(`==================================================\n`);
+
+    if (!isSMTPConfigured) {
+        console.log("ℹ️ Skipping email send (no SMTP config).");
+        return true; // Return true so the flow continues smoothly for testing
+    }
+
     try {
         const info = await transporter.sendMail({
-            from: '"PawMatch" <no-reply@pawmatch.com>',
+            from: `"${process.env.SMTP_FROM_NAME || 'PawMatch'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
             to: email,
             subject: "Verify Your Account - PawMatch",
             text: `Your verification code is: ${otp}. It expires in 10 minutes.`,
@@ -31,17 +50,11 @@ exports.sendOTP = async (email, otp) => {
         });
 
         console.log("Message sent: %s", info.messageId);
-
-        // For development/testing (if using Ethereal)
-        /* 
-           If you strictly need to see the link in the console, 
-           nodemailer.getTestMessageUrl(info) works with Ethereal accounts automatically created,
-           but here we are using env vars. 
-        */
-
         return true;
     } catch (error) {
-        console.error("Error sending email:", error);
+        console.error("❌ Error sending email:", error);
+        // We return false here to indicate email failure, but depending on requirements we might want to let the user proceed if we logged it.
+        // For now, let's allow it to 'fail' essentially, but since we logged the OTP, the developer can still proceed.
         return false;
     }
 };
