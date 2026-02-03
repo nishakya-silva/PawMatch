@@ -1,0 +1,63 @@
+-- Users Table
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255),
+    phone_number VARCHAR(20),
+    is_verified BOOLEAN DEFAULT FALSE,
+    pawsonality_results JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Pets Table
+CREATE TABLE IF NOT EXISTS pets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL, -- Dog, Cat
+    breed VARCHAR(100),
+    age VARCHAR(50), -- "2 years", "4 months"
+    gender VARCHAR(10),
+    size VARCHAR(20), -- Small, Medium, Large
+    energy_level VARCHAR(20), -- sedentary, moderate, active, athletic
+    temperament JSON, -- Tags like "Friendly", "Shy", "Good with kids"
+    social_profile JSON, -- {"dogs": true, "cats": false, "kids": true}
+    living_situation_match JSON, -- {"apartment": true, "house_small": true}
+    image_url VARCHAR(500),
+    shelter_id INT, -- mock ID
+    status VARCHAR(50) DEFAULT 'available',
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Adoptions Table
+CREATE TABLE IF NOT EXISTS adoptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    pet_id INT,
+    adoption_date DATE DEFAULT (CURRENT_DATE),
+    status VARCHAR(50) DEFAULT 'pending', -- pending, approved, active, completed
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (pet_id) REFERENCES pets(id)
+);
+
+-- Welfare Logs Table
+CREATE TABLE IF NOT EXISTS welfare_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    adoption_id INT,
+    log_date DATE DEFAULT (CURRENT_DATE),
+    checklist JSON, -- {"morning_feed": true, "walk": true}
+    mood VARCHAR(50),
+    notes TEXT,
+    risk_flagged BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (adoption_id) REFERENCES adoptions(id)
+);
+
+-- Seed Data for Pets
+INSERT INTO pets (name, type, breed, age, gender, size, energy_level, temperament, social_profile, living_situation_match, image_url, description) VALUES
+('Bruno', 'Dog', 'Labrador Mix', '2 years', 'Male', 'Large', 'active', '["Friendly", "Playful", "Smart"]', '{"dogs": true, "cats": true, "kids": true}', '{"house_small": true, "house_large": true, "rural": true, "apartment": false}', 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&q=80', 'Bruno is a high-energy lab mix who loves to play fetch and swim.'),
+('Luna', 'Dog', 'Beagle', '4 years', 'Female', 'Medium', 'moderate', '["Gentle", "Curious", "Food-motivated"]', '{"dogs": true, "cats": false, "kids": true}', '{"house_small": true, "house_large": true, "rural": true, "apartment": true}', 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?auto=format&fit=crop&q=80', 'Luna is a sweet beagle who loves sniffaris and following her nose.'),
+('Rocky', 'Dog', 'German Shepherd', '3 years', 'Male', 'Large', 'athletic', '["Loyal", "Protective", "Intelligent"]', '{"dogs": false, "cats": false, "kids": false}', '{"house_large": true, "rural": true, "apartment": false, "house_small": false}', 'https://images.unsplash.com/photo-1589941013453-ec89f33b5e95?auto=format&fit=crop&q=80', 'Rocky needs an experienced handler and lots of exercise.'),
+('Bella', 'Dog', 'Pug', '5 years', 'Female', 'Small', 'sedentary', '["Affectionate", "Calm", "Funny"]', '{"dogs": true, "cats": true, "kids": true}', '{"apartment": true, "house_small": true, "house_large": true, "rural": true}', 'https://images.unsplash.com/photo-1517423568366-8b83523034fd?auto=format&fit=crop&q=80', 'Bella loves to cuddle and nap. Perfect for apartment living.');
