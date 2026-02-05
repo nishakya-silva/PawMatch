@@ -35,4 +35,9 @@ router.post('/alerts/test', async (req, res) => {
     res.json(result);
 });
 
+// Pet Routes
+const petController = require('../controllers/petController');
+router.post('/pets', petController.uploadMiddleware, petController.addPet);
+router.get('/pets', petController.getAllPets);
+
 module.exports = router;

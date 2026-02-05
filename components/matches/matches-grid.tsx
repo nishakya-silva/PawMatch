@@ -56,7 +56,7 @@ export function MatchesGrid() {
           location: "PawMatch Shelter", // placeholder
           compatibility: Math.round(m.matchScore),
           traits: m.matchReasons || JSON.parse(m.temperament || '[]'),
-          image: m.image_url || "/placeholder.svg?height=400&width=400"
+          image: m.profile_image_url || m.image_url || "/placeholder.svg?height=400&width=400"
         }))
 
         if (validMatches.length > 0) {

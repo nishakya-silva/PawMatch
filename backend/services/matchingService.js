@@ -104,7 +104,8 @@ class MatchingService {
                 ...pet,
                 matchScore: Math.max(0, Math.min(100, score + 50)), // Normalize somewhat to 0-100 base 50
                 matchReasons: reasons,
-                isDisqualified
+                isDisqualified,
+                profile_image_url: pet.image_url // Frontend expects this key
             };
         });
 
