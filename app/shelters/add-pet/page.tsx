@@ -23,9 +23,9 @@ export default function AddPetPage() {
         age: "",
         gender: "Male",
         size: "Medium",
-        energy_level: "moderate",
+        energy_level: "5", // 1-10 slider
         description: "",
-        temperament: "[]", // Default JSON string
+        temperament: '{"cuddle_factor": 5}', // JSON string
         social_profile: '{"dogs": true, "cats": false, "kids": true}', // Default JSON
         living_situation_match: '{"apartment": true, "house_small": true, "house_large": true, "rural": true}' // Default JSON
     })
@@ -191,20 +191,76 @@ export default function AddPetPage() {
                                         </Select>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="energy_level">Energy Level</Label>
-                                        <Select value={formData.energy_level} onValueChange={(val) => handleSelectChange('energy_level', val)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select energy" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="sedentary">Sedentary</SelectItem>
-                                                <SelectItem value="moderate">Moderate</SelectItem>
-                                                <SelectItem value="active">Active</SelectItem>
-                                                <SelectItem value="athletic">Athletic</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label>Energy Level (1-10)</Label>
+                                            <div className="flex items-center gap-4">
+                                                <input
+                                                    type="range" min="1" max="10" step="1"
+                                                    value={parseInt(formData.energy_level)}
+                                                    onChange={(e) => handleSelectChange('energy_level', e.target.value)}
+                                                    className="w-full"
+                                                />
+                                                <span className="font-bold w-8">{formData.energy_level}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Cuddle Factor (1-10)</Label>
+                                            <div className="flex items-center gap-4">
+                                                <input
+                                                    type="range" min="1" max="10" step="1"
+                                                    value={JSON.parse(formData.temperament).cuddle_factor || 5}
+                                                    onChange={(e) => {
+                                                        const temp = JSON.parse(formData.temperament)
+                                                        temp.cuddle_factor = parseInt(e.target.value)
+                                                        setFormData(prev => ({ ...prev, temperament: JSON.stringify(temp) }))
+                                                    }}
+                                                    className="w-full"
+                                                />
+                                                <span className="font-bold w-8">{JSON.parse(formData.temperament).cuddle_factor || 5}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label>Good with Dogs?</Label>
+                                                <Select
+                                                    value={JSON.parse(formData.social_profile).dogs ? "yes" : "no"}
+                                                    onValueChange={(val) => {
+                                                        const social = JSON.parse(formData.social_profile)
+                                                        social.dogs = val === "yes"
+                                                        setFormData(prev => ({ ...prev, social_profile: JSON.stringify(social) }))
+                                                    }}
+                                                >
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="yes">Yes</SelectItem>
+                                                        <SelectItem value="no">No</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Good with Cats?</Label>
+                                                <Select
+                                                    value={JSON.parse(formData.social_profile).cats ? "yes" : "no"}
+                                                    onValueChange={(val) => {
+                                                        const social = JSON.parse(formData.social_profile)
+                                                        social.cats = val === "yes"
+                                                        setFormData(prev => ({ ...prev, social_profile: JSON.stringify(social) }))
+                                                    }}
+                                                >
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="yes">Yes</SelectItem>
+                                                        <SelectItem value="no">No</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
                                     </div>
+
                                 </div>
 
                                 <div className="space-y-2">
@@ -225,8 +281,8 @@ export default function AddPetPage() {
                         </CardContent>
                     </Card>
                 </div>
-            </main>
+            </main >
             <Footer />
-        </div>
+        </div >
     )
 }

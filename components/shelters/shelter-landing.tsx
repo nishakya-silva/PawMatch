@@ -72,6 +72,11 @@ export function ShelterLanding() {
                   <Link href="/shelters/demo">Request Demo</Link>
                 </Button>
               </div>
+              <div className="pt-2">
+                <Link href="/shelters/signin" className="text-sm text-primary hover:underline font-medium">
+                  Already a partner? Sign in to your dashboard
+                </Link>
+              </div>
             </div>
             <div className="relative">
               <img
@@ -94,6 +99,53 @@ export function ShelterLanding() {
                 <p className="text-primary-foreground/80">{stat.label}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-20 bg-background">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <h2 className="text-3xl font-bold text-foreground mb-4">How It Works</h2>
+            <p className="text-muted-foreground text-lg">
+              A simple, streamlined process to help you manage adoptions effectively.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-8">
+            {/* Step 1 */}
+            <div className="relative flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 z-10">
+                <span className="text-2xl font-bold text-primary">1</span>
+              </div>
+              <h3 className="text-xl font-bold mb-2">Become a Partner</h3>
+              <p className="text-muted-foreground">Create your shelter profile.</p>
+            </div>
+            {/* Step 2 */}
+            <div className="relative flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 z-10">
+                <span className="text-2xl font-bold text-primary">2</span>
+              </div>
+              <h3 className="text-xl font-bold mb-2">List</h3>
+              <p className="text-muted-foreground">Upload dog profiles (or sync with existing databases).</p>
+            </div>
+            {/* Step 3 */}
+            <div className="relative flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 z-10">
+                <span className="text-2xl font-bold text-primary">3</span>
+              </div>
+              <h3 className="text-xl font-bold mb-2">Match</h3>
+              <p className="text-muted-foreground">Let the algorithm filter high-compatibility applicants.</p>
+            </div>
+            {/* Step 4 */}
+            <div className="relative flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6 z-10">
+                <span className="text-2xl font-bold text-primary">4</span>
+              </div>
+              <h3 className="text-xl font-bold mb-2">Monitor</h3>
+              <p className="text-muted-foreground">Receive automated welfare reports during the settling-in phase.</p>
+            </div>
           </div>
         </div>
       </section>

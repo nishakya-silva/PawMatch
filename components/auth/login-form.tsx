@@ -55,8 +55,14 @@ export function LoginForm() {
       // Save token
       login(data.token, data.user)
 
-      // Redirect to home page
-      router.push("/")
+      // Redirect based on role
+      if (data.user.role === 'admin') {
+        router.push("/admin/dashboard")
+      } else if (data.user.role === 'shelter') {
+        router.push("/shelters/dashboard")
+      } else {
+        router.push("/")
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -139,7 +145,7 @@ export function LoginForm() {
 
         {/* Shelter link */}
         <div className="mt-6 text-center">
-          <Link href="/shelters/login" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link href="/shelters/signin" className="text-sm text-muted-foreground hover:text-foreground">
             Are you a shelter? Sign in here →
           </Link>
         </div>

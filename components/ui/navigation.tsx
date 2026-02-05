@@ -37,29 +37,57 @@ export function Navigation() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/quiz" className="text-muted-foreground hover:text-foreground transition-colors">
-              Take Quiz
-            </Link>
-            <Link href="/matches" className="text-muted-foreground hover:text-foreground transition-colors">
-              Browse Matches
-            </Link>
-            <Link href="/foster-to-adopt" className="text-muted-foreground hover:text-foreground transition-colors">
-              Foster to Adopt
-            </Link>
-            <Link href="/community-report" className="text-muted-foreground hover:text-foreground transition-colors">
-              Report Animal
-            </Link>
-            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-              Welfare Tracker
-            </Link>
-            <Link href="/shelters" className="text-muted-foreground hover:text-foreground transition-colors">
-              For Shelters
-            </Link>
+            {user?.role !== 'shelter' && user?.role !== 'admin' && (
+              <>
+                <Link href="/quiz" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Take Quiz
+                </Link>
+                <Link href="/matches" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Browse Matches
+                </Link>
+                <Link href="/foster-to-adopt" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Foster to Adopt
+                </Link>
+                <Link href="/community-report" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Report Animal
+                </Link>
+                <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Welfare Tracker
+                </Link>
+              </>
+            )}
+
+            {user?.role === 'shelter' && (
+              <>
+                <Link href="/shelters/dashboard" className="text-foreground font-medium transition-colors">
+                  Dashboard
+                </Link>
+                <Link href="/shelters/add-pet" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Add Pet
+                </Link>
+              </>
+            )}
+
+            {!user && (
+              <Link href="/shelters" className="text-muted-foreground hover:text-foreground transition-colors">
+                For Shelters
+              </Link>
+            )}
           </div>
 
           <div className="hidden md:flex items-center gap-4">
             {user ? (
               <div className="flex items-center gap-4">
+                {user.role === 'admin' && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/admin/dashboard">Admin Panel</Link>
+                  </Button>
+                )}
+                {user.role === 'shelter' && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/shelters/dashboard">Shelter Dashboard</Link>
+                  </Button>
+                )}
                 <span className="text-sm font-medium">
                   Hi, {user.name?.split(' ')[0] || 'User'}
                 </span>
@@ -74,12 +102,14 @@ export function Navigation() {
               </Button>
             )}
 
-            <Button asChild>
-              <Link href="/quiz">
-                <Heart className="w-4 h-4 mr-2" />
-                Find Your Match
-              </Link>
-            </Button>
+            {user?.role !== 'shelter' && user?.role !== 'admin' && (
+              <Button asChild>
+                <Link href="/quiz">
+                  <Heart className="w-4 h-4 mr-2" />
+                  Find Your Match
+                </Link>
+              </Button>
+            )}
           </div>
 
           <button className="md:hidden p-2" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">
@@ -109,6 +139,19 @@ export function Navigation() {
           <Link href="/shelters" className="block py-2 text-muted-foreground hover:text-foreground">
             For Shelters
           </Link>
+
+          {user?.role === 'shelter' && (
+            <Link href="/shelters/dashboard" className="block py-2 font-medium text-primary">
+              Shelter Dashboard
+            </Link>
+          )}
+
+          {user?.role === 'admin' && (
+            <Link href="/admin/dashboard" className="block py-2 font-medium text-primary">
+              Admin Panel
+            </Link>
+          )}
+
           <div className="flex flex-col gap-2 pt-4 border-t border-border">
             {user ? (
               <>
@@ -124,9 +167,12 @@ export function Navigation() {
                 <Link href="/login">Sign In</Link>
               </Button>
             )}
-            <Button asChild>
-              <Link href="/quiz">Find Your Match</Link>
-            </Button>
+
+            {user?.role !== 'shelter' && user?.role !== 'admin' && (
+              <Button asChild>
+                <Link href="/quiz">Find Your Match</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>

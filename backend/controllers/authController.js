@@ -11,11 +11,13 @@ const generateOTP = () => {
 
 exports.register = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password, phone, role, shelter_name } = req.body;
 
         if (!email || !password || !name) {
             return res.status(400).json({ error: 'Please enter all required fields' });
         }
+
+        const userRole = role === 'shelter' ? 'shelter' : 'adopter';
 
         // Check if user exists
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -38,8 +40,8 @@ exports.register = async (req, res) => {
 
             // Update existing unverified user
             await db.query(
-                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                [name, hashedPassword, phone || null, otpHash, otpExpiresAt, email]
+                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                [name, hashedPassword, phone || null, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
             );
 
             // Send OTP
@@ -63,8 +65,8 @@ exports.register = async (req, res) => {
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [name, email, hashedPassword, phone || null, false, otpHash, otpExpiresAt]
+            'INSERT INTO users (name, email, password_hash, phone_number, role, shelter_name, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, email, hashedPassword, phone || null, userRole, shelter_name || null, false, otpHash, otpExpiresAt]
         );
 
         await emailService.sendOTP(email, otp);
@@ -217,7 +219,10 @@ exports.login = async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name
+                name: user.name,
+                role: user.role,
+                shelter_name: user.shelter_name,
+                verification_status: user.verification_status
             }
         };
 

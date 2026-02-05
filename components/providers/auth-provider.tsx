@@ -7,6 +7,9 @@ interface User {
     id: number
     email: string
     name: string
+    role?: string
+    shelter_name?: string
+    verification_status?: string
 }
 
 interface AuthContextType {

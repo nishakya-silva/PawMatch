@@ -40,4 +40,11 @@ const petController = require('../controllers/petController');
 router.post('/pets', petController.uploadMiddleware, petController.addPet);
 router.get('/pets', petController.getAllPets);
 
+// Admin / Shelter Verification Routes
+const adminController = require('../controllers/adminController');
+router.post('/shelters/verify-request', adminController.uploadVerificationDoc, adminController.submitVerification);
+router.get('/admin/pending-shelters', adminController.getPendingShelters);
+router.post('/admin/verify-shelter', adminController.verifyShelter);
+router.get('/admin/stats', adminController.getStats);
+
 module.exports = router;

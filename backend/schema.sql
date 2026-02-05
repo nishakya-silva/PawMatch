@@ -7,6 +7,12 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number VARCHAR(20),
     is_verified BOOLEAN DEFAULT FALSE,
     pawsonality_results JSON,
+    role VARCHAR(20) DEFAULT 'adopter', -- 'adopter', 'shelter', 'admin'
+    shelter_name VARCHAR(255), -- Only for shelters
+    verification_status VARCHAR(20) DEFAULT 'unverified', -- unverified, pending, verified, rejected
+    registry_type VARCHAR(50), -- NGO Secretariat, Dept of Animal Production
+    registration_number VARCHAR(50),
+    verification_document_url VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
