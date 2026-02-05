@@ -71,7 +71,7 @@ export function VerifyForm() {
 
             // Redirect
             // Redirect
-            window.location.href = "/"
+            window.location.href = "/profile"
 
         } catch (err: any) {
             setError(err.message)

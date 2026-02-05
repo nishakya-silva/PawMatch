@@ -7,9 +7,17 @@ interface User {
     id: number
     email: string
     name: string
+
     role?: string
     shelter_name?: string
     verification_status?: string
+
+    nic?: string
+    phone_number?: string
+    email_notifications?: boolean
+    sms_alerts?: boolean
+    created_at?: string
+
 }
 
 interface AuthContextType {
@@ -17,6 +25,7 @@ interface AuthContextType {
     token: string | null
     login: (token: string, user: User) => void
     logout: () => void
+    refreshUser: (user: User) => void
     isLoading: boolean
 }
 
@@ -63,8 +72,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push("/login")
     }
 
+    const refreshUser = (updatedUser: User) => {
+        sessionStorage.setItem("user", JSON.stringify(updatedUser))
+        setUser(updatedUser)
+    }
+
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, refreshUser, isLoading }}>
             {children}
         </AuthContext.Provider>
     )

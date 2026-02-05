@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -8,59 +8,209 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Heart, MapPin, Share2, ArrowLeft, Check, Phone, Mail } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/providers/auth-provider"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useRouter } from "next/navigation"
 
-const petData = {
-  id: 1,
-  name: "Bruno",
-  breed: "Golden Retriever Mix",
-  age: "2 years",
-  gender: "Male",
-  weight: "28 kg",
-  location: "Colombo Shelter",
-  compatibility: 95,
-  images: [
-    "/placeholder.svg?height=600&width=600",
-    "/placeholder.svg?height=600&width=600",
-    "/placeholder.svg?height=600&width=600",
-  ],
-  story:
-    "Bruno was found wandering the streets of Colombo as a young pup. After being brought to our shelter, he quickly became a staff favorite with his gentle nature and love for belly rubs. He's been with us for 8 months and is ready to find his forever home.",
-  traits: {
-    energyLevel: 80,
-    friendliness: 95,
-    trainability: 85,
-    goodWithKids: 90,
-    goodWithDogs: 85,
-    goodWithCats: 60,
-  },
-  healthStatus: {
-    vaccinated: true,
-    neutered: true,
-    microchipped: true,
-    healthChecked: true,
-  },
-  compatibilityBreakdown: [
-    { label: "Activity Match", score: 95, description: "Bruno's energy level matches your active lifestyle perfectly" },
-    { label: "Space Compatibility", score: 92, description: "Great fit for a house with yard" },
-    { label: "Family Fit", score: 98, description: "Excellent with children and families" },
-    { label: "Experience Match", score: 90, description: "Suitable for your experience level" },
-  ],
-  shelter: {
-    name: "Colombo Animal Welfare Center",
-    phone: "+94 11 234 5678",
-    email: "adopt@colomboshelter.lk",
-    address: "123 Galle Road, Colombo 03",
-  },
+interface PetProfileProps {
+  id: string
 }
 
-export function PetProfile() {
+export function PetProfile({ id }: PetProfileProps) {
+  const { user, token } = useAuth()
+  const router = useRouter()
+  const [pet, setPet] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState(0)
   const [isFavorite, setIsFavorite] = useState(false)
+  const [isAdopting, setIsAdopting] = useState(false)
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+
+  // Visit scheduling state
+  const [isVisitModalOpen, setIsVisitModalOpen] = useState(false)
+  const [isScheduling, setIsScheduling] = useState(false)
+  const [visitForm, setVisitForm] = useState({
+    date: "",
+    time: "",
+    contact: user?.phone_number || "",
+    notes: ""
+  })
+
+  useEffect(() => {
+    const fetchPet = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/pets/${id}`)
+        const data = await res.json()
+        if (data.success) {
+          setPet(data.pet)
+        } else {
+          toast.error("Pet not found")
+        }
+      } catch (err) {
+        console.error("Fetch error:", err)
+        toast.error("Failed to load pet details")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchPet()
+  }, [id])
+
+  // Sync contact info when user changes
+  useEffect(() => {
+    setVisitForm(prev => ({ ...prev, contact: user?.phone_number || "" }))
+  }, [user])
+
+  const handleStartAdoption = async () => {
+    if (!user) {
+      toast.error("Please sign in to start the adoption process")
+      router.push("/login")
+      return
+    }
+
+    setIsAdopting(true)
+    try {
+      const res = await fetch("http://localhost:5000/api/adopt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-auth-token": token || ""
+        },
+        body: JSON.stringify({
+          petId: pet.id,
+          userId: user.id
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Adoption successful! ${pet.name} is now officially part of your family.`)
+        setIsConfirmModalOpen(false)
+        router.push("/profile")
+      } else {
+        toast.error(data.error || "Failed to submit application")
+      }
+    } catch (error) {
+      toast.error("An error occurred. Please try again.")
+    } finally {
+      setIsAdopting(false)
+    }
+  }
+
+  const handleScheduleVisit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) {
+      toast.error("Please sign in to schedule a visit")
+      router.push("/login")
+      return
+    }
+
+    setIsScheduling(true)
+    try {
+      const res = await fetch("http://localhost:5000/api/visits", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-auth-token": token || ""
+        },
+        body: JSON.stringify({
+          petId: pet.id,
+          userId: user.id,
+          date: visitForm.date,
+          time: visitForm.time,
+          contact: visitForm.contact,
+          notes: visitForm.notes
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        toast.success("Visit scheduled! The shelter has been notified.")
+        setIsVisitModalOpen(false)
+      } else {
+        toast.error(data.error || "Failed to schedule visit")
+      }
+    } catch (error) {
+      toast.error("An error occurred while scheduling")
+    } finally {
+      setIsScheduling(false)
+    }
+  }
+
+  if (loading) return <div className="py-20 text-center">Loading pet details...</div>
+  if (!pet) return <div className="py-20 text-center">Pet not found (ID: {id})</div>
+
+  // Try to get match info from localStorage
+  let matchInfo = { compatibility: 85, reasons: ["Great general match"] }
+  try {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('pawmatch_matches') : null
+    if (stored) {
+      const matches = JSON.parse(stored)
+      const found = matches.find((m: any) => m.id === pet.id)
+      if (found) {
+        matchInfo = {
+          compatibility: found.compatibility,
+          reasons: found.reasons || []
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Local storage error", e)
+  }
+
+  const images = pet.image_url ? [pet.image_url] : ["/placeholder.svg?height=600&width=600"]
+
+  // Map DB fields to UI expectations (with fallbacks)
+  const displayData = {
+    ...pet,
+    compatibility: matchInfo.compatibility,
+    matchReasons: matchInfo.reasons,
+    images: images,
+    traits: pet.traits || {
+      energyLevel: 70, friendliness: 90, trainability: 80,
+      goodWithKids: 85, goodWithDogs: 80, goodWithCats: 50
+    },
+    healthStatus: {
+      vaccinated: true, neutered: true, microchipped: true, healthChecked: true
+    },
+    compatibilityBreakdown: [
+      {
+        label: "Lifestyle Fit",
+        score: matchInfo.compatibility,
+        description: matchInfo.reasons[0] || "Matches your general lifestyle needs"
+      },
+      {
+        label: "Environment",
+        score: Math.min(100, Math.round(matchInfo.compatibility * 1.05)),
+        description: matchInfo.reasons[1] || "Well-suited for your living situation"
+      },
+      {
+        label: "Social Compatibility",
+        score: Math.min(100, Math.round(matchInfo.compatibility * 0.95)),
+        description: matchInfo.reasons[2] || "Good behavioral match for your household"
+      }
+    ],
+    shelter: {
+      name: "PawMatch Shelter Network",
+      phone: "+94 11 234 5678",
+      email: "adopt@pawmatch.lk",
+      address: "123 Galle Road, Colombo 03",
+    }
+  }
 
   return (
     <div className="py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back button */}
         <Link
           href="/matches"
           className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6"
@@ -70,17 +220,16 @@ export function PetProfile() {
         </Link>
 
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Left: Images */}
           <div className="space-y-4">
             <div className="aspect-square rounded-2xl overflow-hidden bg-muted">
               <img
-                src={petData.images[selectedImage] || "/placeholder.svg"}
-                alt={petData.name}
+                src={displayData.images[selectedImage] || "/placeholder.svg"}
+                alt={displayData.name}
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="grid grid-cols-3 gap-4">
-              {petData.images.map((img, index) => (
+              {displayData.images.map((img: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => setSelectedImage(index)}
@@ -91,7 +240,7 @@ export function PetProfile() {
                 >
                   <img
                     src={img || "/placeholder.svg"}
-                    alt={`${petData.name} ${index + 1}`}
+                    alt={`${displayData.name} ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
                 </button>
@@ -99,62 +248,57 @@ export function PetProfile() {
             </div>
           </div>
 
-          {/* Right: Info */}
           <div className="space-y-6">
-            {/* Header */}
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold text-foreground">{petData.name}</h1>
-                  <Badge className="bg-accent text-accent-foreground text-sm">{petData.compatibility}% Match</Badge>
+                  <h1 className="text-3xl font-bold text-foreground">{displayData.name}</h1>
+                  <Badge className="bg-accent text-accent-foreground text-sm">{displayData.compatibility}% Match</Badge>
+                  {displayData.status === 'adopted' && (
+                    <Badge variant="outline" className="text-green-600 border-green-600 font-bold ml-2">ADOPTED</Badge>
+                  )}
                 </div>
-                <p className="text-lg text-muted-foreground">{petData.breed}</p>
+                <p className="text-lg text-muted-foreground">{displayData.breed}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={() => setIsFavorite(!isFavorite)}>
                   <Heart className={cn("w-5 h-5", isFavorite && "fill-primary text-primary")} />
                 </Button>
-                <Button variant="outline" size="icon">
-                  <Share2 className="w-5 h-5" />
-                </Button>
               </div>
             </div>
 
-            {/* Quick stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-muted p-4 rounded-xl text-center">
                 <p className="text-sm text-muted-foreground">Age</p>
-                <p className="font-semibold text-foreground">{petData.age}</p>
+                <p className="font-semibold text-foreground">{displayData.age}</p>
               </div>
               <div className="bg-muted p-4 rounded-xl text-center">
                 <p className="text-sm text-muted-foreground">Gender</p>
-                <p className="font-semibold text-foreground">{petData.gender}</p>
+                <p className="font-semibold text-foreground">{displayData.gender}</p>
               </div>
               <div className="bg-muted p-4 rounded-xl text-center">
                 <p className="text-sm text-muted-foreground">Weight</p>
-                <p className="font-semibold text-foreground">{petData.weight}</p>
+                <p className="font-semibold text-foreground">{displayData.weight || 'N/A'}</p>
               </div>
               <div className="bg-muted p-4 rounded-xl text-center">
-                <p className="text-sm text-muted-foreground">Location</p>
-                <p className="font-semibold text-foreground text-sm">{petData.location}</p>
+                <p className="text-sm text-muted-foreground">Status</p>
+                <p className="font-semibold text-foreground text-sm uppercase">{displayData.status}</p>
               </div>
             </div>
 
-            {/* Health status */}
             <div className="flex flex-wrap gap-3">
-              {Object.entries(petData.healthStatus).map(([key, value]) => (
+              {Object.entries(displayData.healthStatus).map(([key, value]) => (
                 <Badge
                   key={key}
                   variant={value ? "default" : "secondary"}
-                  className={cn(value && "bg-accent text-accent-foreground")}
+                  className={cn((value as boolean) && "bg-accent text-accent-foreground")}
                 >
-                  {value && <Check className="w-3 h-3 mr-1" />}
+                  {(value as boolean) && <Check className="w-3 h-3 mr-1" />}
                   {key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
                 </Badge>
               ))}
             </div>
 
-            {/* Tabs */}
             <Tabs defaultValue="compatibility" className="w-full">
               <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
@@ -163,7 +307,7 @@ export function PetProfile() {
               </TabsList>
 
               <TabsContent value="compatibility" className="space-y-4 mt-4">
-                {petData.compatibilityBreakdown.map((item) => (
+                {displayData.compatibilityBreakdown.map((item: any) => (
                   <div key={item.label} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-foreground">{item.label}</span>
@@ -176,61 +320,151 @@ export function PetProfile() {
               </TabsContent>
 
               <TabsContent value="story" className="mt-4">
-                <p className="text-foreground leading-relaxed">{petData.story}</p>
+                <p className="text-foreground leading-relaxed">{displayData.description || "No story available yet."}</p>
               </TabsContent>
 
               <TabsContent value="traits" className="space-y-4 mt-4">
-                {Object.entries(petData.traits).map(([key, value]) => (
-                  <div key={key} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-foreground">
-                        {key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
-                      </span>
-                      <span className="text-sm text-muted-foreground">{value}%</span>
-                    </div>
-                    <Progress value={value} className="h-2" />
+                {Array.isArray(displayData.traits) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {displayData.traits.map((trait: string) => (
+                      <Badge key={trait} variant="secondary" className="px-3 py-1 text-sm bg-primary/10 text-primary border-primary/20">
+                        {trait}
+                      </Badge>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  Object.entries(displayData.traits).map(([key, value]: [string, any]) => (
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-foreground">
+                          {key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+                        </span>
+                        <span className="text-sm text-muted-foreground">{value}%</span>
+                      </div>
+                      <Progress value={value} className="h-2" />
+                    </div>
+                  ))
+                )}
               </TabsContent>
             </Tabs>
 
-            {/* CTA */}
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Button size="lg" className="flex-1" onClick={async () => {
-                try {
-                  // Mock userId = 1
-                  await fetch('http://localhost:5000/api/adopt', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ petId: petData.id, userId: 1 })
-                  });
-                  alert('Application Submitted!');
-                } catch (e) {
-                  console.error(e);
-                }
-              }}>
-                Start Adoption Process
+              <Button
+                size="lg"
+                className="flex-1"
+                onClick={() => setIsConfirmModalOpen(true)}
+                disabled={isAdopting || displayData.status === 'adopted'}
+              >
+                {displayData.status === 'adopted' ? 'Already Adopted' : 'Start Adoption Process'}
               </Button>
-              <Button size="lg" variant="outline" className="flex-1 bg-transparent">
+              <Button
+                size="lg"
+                variant="outline"
+                className="flex-1 bg-transparent"
+                onClick={() => setIsVisitModalOpen(true)}
+              >
                 Schedule a Visit
               </Button>
             </div>
 
+            {/* Confirmation Dialogs - using displayData.name and displayData.status */}
+            <Dialog open={isConfirmModalOpen} onOpenChange={setIsConfirmModalOpen}>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Confirm Adoption</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to start the adoption process for {displayData.name}? This will mark them as adopted and begin your journey together.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => setIsConfirmModalOpen(false)}>Cancel</Button>
+                  <Button onClick={handleStartAdoption} disabled={isAdopting}>
+                    {isAdopting ? "Processing..." : "Confirm Adoption"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isVisitModalOpen} onOpenChange={setIsVisitModalOpen}>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Schedule a Shelter Visit</DialogTitle>
+                  <DialogDescription>
+                    Pick a date and time to meet {displayData.name} in person.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleScheduleVisit}>
+                  {/* ... same form as before ... */}
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="date" className="text-right text-sm">Date</Label>
+                      <Input
+                        id="date"
+                        type="date"
+                        className="col-span-3"
+                        required
+                        value={visitForm.date}
+                        onChange={(e) => setVisitForm({ ...visitForm, date: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="time" className="text-right text-sm">Time</Label>
+                      <Input
+                        id="time"
+                        type="time"
+                        className="col-span-3"
+                        required
+                        value={visitForm.time}
+                        onChange={(e) => setVisitForm({ ...visitForm, time: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="contact" className="text-right text-sm">Contact Info</Label>
+                      <Input
+                        id="contact"
+                        className="col-span-3"
+                        required
+                        placeholder="Your phone or email"
+                        value={visitForm.contact}
+                        onChange={(e) => setVisitForm({ ...visitForm, contact: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="notes" className="text-right text-sm">Notes</Label>
+                      <Input
+                        id="notes"
+                        placeholder="Any specific questions?"
+                        className="col-span-3"
+                        value={visitForm.notes}
+                        onChange={(e) => setVisitForm({ ...visitForm, notes: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsVisitModalOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={isScheduling}>
+                      {isScheduling ? "Scheduling..." : "Confirm Visit"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
             {/* Shelter info */}
             <div className="bg-muted/50 border border-border rounded-xl p-6">
-              <h3 className="font-semibold text-foreground mb-4">{petData.shelter.name}</h3>
+              <h3 className="font-semibold text-foreground mb-4">{displayData.shelter?.name || "Shelter Information"}</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Phone className="w-4 h-4" />
-                  {petData.shelter.phone}
+                  {displayData.shelter?.phone || "Contact Info Unavailable"}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Mail className="w-4 h-4" />
-                  {petData.shelter.email}
+                  {displayData.shelter?.email || "Email Unavailable"}
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="w-4 h-4" />
-                  {petData.shelter.address}
+                  {displayData.shelter?.address || "Location Unavailable"}
                 </div>
               </div>
             </div>

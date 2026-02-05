@@ -7,6 +7,8 @@ const adoptionController = require('../controllers/adoptionController');
 const authController = require('../controllers/authController');
 const alertService = require('../services/alertService');
 
+const auth = require('../middleware/auth');
+
 // Auth Routes
 router.post('/register', authController.register);
 router.post('/login', authController.login);
@@ -14,12 +16,19 @@ router.post('/verify', authController.verifyEmail);
 router.post('/resend-otp', authController.resendOTP);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
+router.get('/me', auth, authController.getMe);
+router.put('/profile', auth, authController.updateProfile);
+router.put('/update-password', auth, authController.updatePassword);
+router.put('/notifications', auth, authController.updateNotifications);
+router.delete('/account', auth, authController.deleteAccount);
+router.get('/logs', auth, authController.getActivityLogs);
 
 // Match Routes
 router.post('/match', matchController.getMatches);
 
 // Adoption Routes
 router.post('/adopt', adoptionController.applyForAdoption);
+router.get('/adoptions/me', auth, adoptionController.getUserAdoptions);
 
 // Welfare Routes
 router.get('/welfare/:adoptionId', welfareController.getDashboard);
@@ -39,6 +48,19 @@ router.post('/alerts/test', async (req, res) => {
 const petController = require('../controllers/petController');
 router.post('/pets', petController.uploadMiddleware, petController.addPet);
 router.get('/pets', petController.getAllPets);
+router.get('/pets/:id', petController.getPetById);
+
+// Visit Routes
+const visitController = require('../controllers/visitController');
+router.post('/visits', auth, visitController.scheduleVisit);
+router.get('/visits', auth, visitController.getUserVisits);
+router.put('/visits/:id', auth, visitController.updateVisit);
+router.delete('/visits/:id', auth, visitController.cancelVisit);
+
+// Shelter Routes (Dashboard Snippets)
+const shelterController = require('../controllers/shelterController');
+router.get('/shelter/:shelterId/visits', shelterController.getVisitRequests);
+router.put('/shelter/visits/:visitId', shelterController.updateVisitStatus);
 
 // Admin / Shelter Verification Routes
 const adminController = require('../controllers/adminController');

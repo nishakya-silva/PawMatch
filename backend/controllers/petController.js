@@ -80,7 +80,18 @@ exports.addPet = async (req, res) => {
 
 exports.getAllPets = async (req, res) => {
     try {
-        const pets = await db.query('SELECT * FROM pets ORDER BY created_at DESC');
+        const { status } = req.query;
+        let query = 'SELECT * FROM pets';
+        const params = [];
+
+        if (status) {
+            query += ' WHERE status = ?';
+            params.push(status);
+        }
+
+        query += ' ORDER BY created_at DESC';
+
+        const pets = await db.query(query, params);
 
         // Map to include profile_image_url for frontend consistency
         const mappedPets = pets.rows.map(pet => ({
@@ -92,5 +103,46 @@ exports.getAllPets = async (req, res) => {
     } catch (error) {
         console.error('Get Pets Error:', error);
         res.status(500).json({ error: 'Server Error' });
+    }
+};
+exports.getPetById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`Fetching pet with ID: ${id}`);
+        const pets = await db.query('SELECT * FROM pets WHERE id = ?', [id]);
+
+        if (pets.rows.length === 0) {
+            console.log(`Pet not found in DB with ID: ${id}`);
+            return res.status(404).json({ error: 'Pet not found' });
+        }
+
+        const pet = pets.rows[0];
+
+        // Robust JSON parsing
+        try {
+            if (typeof pet.temperament === 'string' && pet.temperament.trim()) {
+                pet.temperament = JSON.parse(pet.temperament);
+            }
+            if (typeof pet.social_profile === 'string' && pet.social_profile.trim()) {
+                pet.social_profile = JSON.parse(pet.social_profile);
+            }
+            if (typeof pet.living_situation_match === 'string' && pet.living_situation_match.trim()) {
+                pet.living_situation_match = JSON.parse(pet.living_situation_match);
+            }
+        } catch (parseError) {
+            console.error('JSON Parse Error for pet:', id, parseError);
+            // Non-fatal error for the API, but good to know
+        }
+
+        res.json({
+            success: true,
+            pet: {
+                ...pet,
+                profile_image_url: pet.image_url
+            }
+        });
+    } catch (error) {
+        console.error('getPetById Error:', error);
+        res.status(500).json({ error: 'Server Error', details: error.message });
     }
 };

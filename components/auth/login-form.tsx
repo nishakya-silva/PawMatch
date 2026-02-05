@@ -55,6 +55,7 @@ export function LoginForm() {
       // Save token
       login(data.token, data.user)
 
+
       // Redirect based on role
       if (data.user.role === 'admin') {
         router.push("/admin/dashboard")
@@ -63,6 +64,9 @@ export function LoginForm() {
       } else {
         router.push("/")
       }
+
+
+
     } catch (err: any) {
       setError(err.message)
     } finally {

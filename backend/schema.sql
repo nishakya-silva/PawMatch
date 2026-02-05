@@ -67,3 +67,9 @@ INSERT INTO pets (name, type, breed, age, gender, size, energy_level, temperamen
 ('Luna', 'Dog', 'Beagle', '4 years', 'Female', 'Medium', 'moderate', '["Gentle", "Curious", "Food-motivated"]', '{"dogs": true, "cats": false, "kids": true}', '{"house_small": true, "house_large": true, "rural": true, "apartment": true}', 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?auto=format&fit=crop&q=80', 'Luna is a sweet beagle who loves sniffaris and following her nose.'),
 ('Rocky', 'Dog', 'German Shepherd', '3 years', 'Male', 'Large', 'athletic', '["Loyal", "Protective", "Intelligent"]', '{"dogs": false, "cats": false, "kids": false}', '{"house_large": true, "rural": true, "apartment": false, "house_small": false}', 'https://images.unsplash.com/photo-1589941013453-ec89f33b5e95?auto=format&fit=crop&q=80', 'Rocky needs an experienced handler and lots of exercise.'),
 ('Bella', 'Dog', 'Pug', '5 years', 'Female', 'Small', 'sedentary', '["Affectionate", "Calm", "Funny"]', '{"dogs": true, "cats": true, "kids": true}', '{"apartment": true, "house_small": true, "house_large": true, "rural": true}', 'https://images.unsplash.com/photo-1517423568366-8b83523034fd?auto=format&fit=crop&q=80', 'Bella loves to cuddle and nap. Perfect for apartment living.');
+
+ALTER TABLE users 
+ADD COLUMN otp_hash VARCHAR(255),
+ADD COLUMN otp_expires_at DATETIME,
+ADD COLUMN reset_token_hash VARCHAR(255),
+ADD COLUMN reset_token_expires_at DATETIME;
