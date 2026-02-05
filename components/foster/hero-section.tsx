@@ -21,11 +21,11 @@ export function FosterHeroSection() {
             </p>
 
             <div className="flex flex-wrap gap-4 mb-12">
-              <Button size="lg" className="text-lg px-8">
-                Find Foster Pets
+              <Button size="lg" className="text-lg px-8" asChild>
+                <a href="#foster-pets">Find Foster Pets</a>
               </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent">
-                Learn More
+              <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent" asChild>
+                <a href="#foster-learn">Learn More</a>
               </Button>
             </div>
 

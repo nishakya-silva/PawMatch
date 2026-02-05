@@ -80,24 +80,31 @@ exports.addPet = async (req, res) => {
 
 exports.getAllPets = async (req, res) => {
     try {
-        const { status } = req.query;
-        let query = 'SELECT * FROM pets';
+        const { status, is_foster } = req.query;
+        let query = 'SELECT * FROM pets WHERE 1=1';
         const params = [];
 
         if (status) {
-            query += ' WHERE status = ?';
+            query += ' AND status = ?';
             params.push(status);
+        }
+
+        if (is_foster === 'true') {
+            query += ' AND is_foster = 1';
+        } else if (is_foster === 'false') {
+            query += ' AND is_foster = 0';
         }
 
         query += ' ORDER BY created_at DESC';
 
-        const pets = await db.query(query, params);
+        const result = await db.query(query, params);
+        const petsData = result.rows || result; // Handle both result formats
 
         // Map to include profile_image_url for frontend consistency
-        const mappedPets = pets.rows.map(pet => ({
+        const mappedPets = Array.isArray(petsData) ? petsData.map(pet => ({
             ...pet,
             profile_image_url: pet.image_url
-        }));
+        })) : [];
 
         res.json({ success: true, count: mappedPets.length, pets: mappedPets });
     } catch (error) {
