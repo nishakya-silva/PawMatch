@@ -134,15 +134,6 @@ export function Navigation() {
               </>
             )}
 
-            {user?.role !== 'shelter' && user?.role !== 'admin' && (
-              <Button asChild>
-                <Link href="/quiz">
-                  <Heart className="w-4 h-4 mr-2" />
-                  Find Your Match
-                </Link>
-              </Button>
-            )}
-
           </div>
 
           <button className="md:hidden p-2" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">

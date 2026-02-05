@@ -72,4 +72,84 @@ ALTER TABLE users
 ADD COLUMN otp_hash VARCHAR(255),
 ADD COLUMN otp_expires_at DATETIME,
 ADD COLUMN reset_token_hash VARCHAR(255),
-ADD COLUMN reset_token_expires_at DATETIME;
+ADD COLUMN reset_token_expires_at DATETIME,
+ADD COLUMN nic VARCHAR(20),
+ADD COLUMN email_notifications BOOLEAN DEFAULT TRUE,
+ADD COLUMN sms_alerts BOOLEAN DEFAULT TRUE;
+
+ALTER TABLE pets
+ADD COLUMN is_foster BOOLEAN DEFAULT FALSE;
+
+-- Activity Logs Table
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    action_type VARCHAR(100),
+    details JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Animal Reports Table
+CREATE TABLE IF NOT EXISTS animal_reports (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    animal_type VARCHAR(50),
+    condition_type VARCHAR(50),
+    location VARCHAR(255),
+    description TEXT,
+    contact_name VARCHAR(100),
+    contact_phone VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Pending Users Table
+CREATE TABLE IF NOT EXISTS pending_users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    password_hash VARCHAR(255),
+    phone_number VARCHAR(20),
+    nic VARCHAR(20),
+    otp_hash VARCHAR(255),
+    otp_expires_at DATETIME,
+    role VARCHAR(20) DEFAULT 'adopter',
+    shelter_name VARCHAR(255),
+    is_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Shelter Messages Table
+CREATE TABLE IF NOT EXISTS shelter_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    adoption_id INT,
+    shelter_id INT,
+    subject VARCHAR(255),
+    message TEXT,
+    is_read TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    pet_id INT
+);
+
+-- Shelter Visits Table
+CREATE TABLE IF NOT EXISTS shelter_visits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    pet_id INT,
+    shelter_id INT,
+    visit_date DATE,
+    visit_time TIME,
+    status VARCHAR(50) DEFAULT 'pending', -- pending, confirmed, completed, cancelled
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed Data for Animal Reports
+INSERT INTO animal_reports (animal_type, condition_type, location, description, contact_name, contact_phone, status) VALUES
+('Dog', 'Injured', 'Mount Lavinia Beach', 'Brown dog with a limp on the left hind leg.', 'Saman Kumara', '0771234567', 'pending'),
+('Cat', 'Abandoned', 'Dehiwala Zoo Road', 'Kittens left in a box near the entrance.', 'Nimal Perera', '0719876543', 'investigating');
+
+-- Seed Data for Shelter Visits
+INSERT INTO shelter_visits (user_id, pet_id, shelter_id, visit_date, visit_time, status, notes) VALUES
+(1, 1, 1, '2023-10-25', '10:00:00', 'confirmed', 'First time meeting Bruno'),
+(1, 2, 1, '2023-10-26', '14:30:00', 'pending', 'Interested in Luna');

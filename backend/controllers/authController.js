@@ -4,7 +4,6 @@ const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const emailService = require('../services/emailService');
-
 const nicValidator = require('../utils/nicValidator');
 
 // Helper to generate 6 digit OTP
@@ -14,21 +13,25 @@ const generateOTP = () => {
 
 exports.register = async (req, res) => {
     try {
-<<<<<<< HEAD
-        const { name, email, password, phone, role, shelter_name } = req.body;
-=======
-        const { name, email, password, phone, nic } = req.body;
->>>>>>> f179a03c81dd09f1c1e3a265a6a04542e05a349f
+        const { name, email, password, phone, nic, role, shelter_name } = req.body;
 
+        // 1. Basic Validation
         if (!email || !password || !name || !nic) {
             return res.status(400).json({ error: 'Please enter all required fields including NIC' });
         }
 
-<<<<<<< HEAD
+        // 2. NIC Validation (MOVED UP: This must happen before using cleanNic)
+        const nicValidation = nicValidator(nic);
+        if (!nicValidation.valid) {
+            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
+        }
+        const cleanNic = nicValidation.nic;
+
         const userRole = role === 'shelter' ? 'shelter' : 'adopter';
 
-        // Check if user exists
+        // 3. Check if user exists in main table
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+
         if (userCheck.rows.length > 0) {
             const existingUser = userCheck.rows[0];
 
@@ -36,23 +39,21 @@ exports.register = async (req, res) => {
                 return res.status(400).json({ error: 'User already exists' });
             }
 
-            // Hash password
+            // --- Existing Unverified User Logic ---
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
 
-            // Generate OTP
             const otp = generateOTP();
             const otpSalt = await bcrypt.genSalt(10);
             const otpHash = await bcrypt.hash(otp, otpSalt);
             const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-            // Update existing unverified user
+            // Now cleanNic is defined and safe to use here
             await db.query(
-                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                [name, hashedPassword, phone || null, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
+                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                [name, hashedPassword, phone || null, cleanNic, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
             );
 
-            // Send OTP
             await emailService.sendOTP(email, otp);
 
             return res.status(200).json({
@@ -61,44 +62,26 @@ exports.register = async (req, res) => {
                 requiresVerification: true,
                 email: email
             });
-=======
-        // Validate Sri Lankan NIC using utility
-        const nicValidation = nicValidator(nic);
-        if (!nicValidation.valid) {
-            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
-        }
-        const cleanNic = nicValidation.nic;
-
-        // 1. Check if user already exists in main users table
-        const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (userCheck.rows.length > 0) {
-            return res.status(400).json({ error: 'User already exists with this email' });
->>>>>>> f179a03c81dd09f1c1e3a265a6a04542e05a349f
         }
 
-        // 2. Check if NIC already exists in main table
+        // --- New User Logic ---
+
+        // 4. Check if NIC already exists in main table
         const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
         if (nicCheckMain.rows.length > 0) {
             return res.status(400).json({ error: 'This NIC is already registered' });
         }
 
-        // Hash password
+        // 5. Hash Password & Generate OTP
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Generate OTP
         const otp = generateOTP();
         const otpSalt = await bcrypt.genSalt(10);
         const otpHash = await bcrypt.hash(otp, otpSalt);
-        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-<<<<<<< HEAD
-        await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, role, shelter_name, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, email, hashedPassword, phone || null, userRole, shelter_name || null, false, otpHash, otpExpiresAt]
-        );
-=======
-        // 3. Check if exists in pending_users
+        // 6. Check Pending Users
         const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
 
         if (pendingCheck.rows.length > 0) {
@@ -121,13 +104,12 @@ exports.register = async (req, res) => {
                 return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
             }
 
-            // Insert into pending_users
+            // Insert new pending user
             await db.query(
-                'INSERT INTO pending_users (name, email, password_hash, phone_number, nic, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [name, email, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt]
+                'INSERT INTO pending_users (name, email, password_hash, phone_number, role, shelter_name, is_verified, nic, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [name, email, hashedPassword, phone || null, userRole, shelter_name || null, false, cleanNic, otpHash, otpExpiresAt]
             );
         }
->>>>>>> f179a03c81dd09f1c1e3a265a6a04542e05a349f
 
         await emailService.sendOTP(email, otp);
 
@@ -229,8 +211,6 @@ exports.resendOTP = async (req, res) => {
             return res.status(404).json({ error: "Verification record not found" });
         }
 
-        const user = pendingCheck.rows[0];
-
         // Generate new OTP
         const otp = generateOTP();
         const otpSalt = await bcrypt.genSalt(10);
@@ -285,13 +265,10 @@ exports.login = async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-<<<<<<< HEAD
                 role: user.role,
                 shelter_name: user.shelter_name,
-                verification_status: user.verification_status
-=======
+                verification_status: user.verification_status,
                 nic: user.nic
->>>>>>> f179a03c81dd09f1c1e3a265a6a04542e05a349f
             }
         };
 
@@ -401,7 +378,7 @@ exports.getMe = async (req, res) => {
         res.json(user.rows[0]);
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
 
@@ -428,7 +405,7 @@ exports.updateProfile = async (req, res) => {
         res.json({ success: true, user: updatedUser.rows[0] });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
 
@@ -464,7 +441,7 @@ exports.updatePassword = async (req, res) => {
         res.json({ success: true, message: 'Password updated successfully' });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
 
@@ -481,7 +458,7 @@ exports.updateNotifications = async (req, res) => {
         res.json({ success: true, message: 'Notification preferences updated' });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
 
@@ -504,7 +481,7 @@ exports.deleteAccount = async (req, res) => {
         res.json({ success: true, message: 'Account deleted successfully' });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
 
@@ -518,6 +495,6 @@ exports.getActivityLogs = async (req, res) => {
         res.json({ success: true, logs: logs.rows });
     } catch (err) {
         console.error("Fetch Activity Logs Error:", err);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' });
     }
 };
