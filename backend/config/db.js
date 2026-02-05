@@ -12,8 +12,10 @@ const pool = mysql.createPool({
 });
 
 module.exports = {
+  pool,
   query: async (sql, params = []) => {
-    const [results,] = await pool.execute(sql, params);
+    // Use .query instead of .execute for broader support (e.g. START TRANSACTION)
+    const [results] = await pool.query(sql, params);
     return { rows: results }; // Maintain compatibility with pg style { rows: [] } return
   }
 };

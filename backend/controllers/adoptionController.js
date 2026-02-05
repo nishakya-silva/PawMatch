@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { logActivity } = require('../utils/logger');
 
 exports.applyForAdoption = async (req, res) => {
     try {
@@ -11,19 +12,36 @@ exports.applyForAdoption = async (req, res) => {
             return res.status(400).json({ error: "Pet ID is required" });
         }
 
-        // Create adoption record
+        // Create adoption record and update pet status
+        const connection = await db.pool.getConnection();
         try {
-            const result = await db.query(
-                "INSERT INTO adoptions (user_id, pet_id, status) VALUES (?, ?, 'pending')",
-                [userId, petId] // Removed unsafe default || 1
+            // Start transaction
+            await connection.query("START TRANSACTION");
+
+            const [results] = await connection.query(
+                "INSERT INTO adoptions (user_id, pet_id, status) VALUES (?, ?, 'approved')",
+                [userId, petId]
             );
+
+            await connection.query(
+                "UPDATE pets SET status = 'adopted' WHERE id = ?",
+                [petId]
+            );
+
+            await connection.commit();
+
+            // Log activity
+            await logActivity(userId, 'ADOPTION_APPLICATION', { petId, adoptionId: results.insertId });
 
             res.json({
                 success: true,
-                message: "Application submitted successfully",
-                adoptionId: result.rows.insertId
+                message: "Adoption successful! The pet is now linked to your profile.",
+                adoptionId: results.insertId
             });
         } catch (sqlError) {
+            await connection.rollback();
+            console.error("SQL Error in Transaction:", sqlError);
+
             // Handle Foreign Key Constraint Failure
             if (sqlError.code === 'ER_NO_REFERENCED_ROW_2') {
                 if (sqlError.sqlMessage && sqlError.sqlMessage.includes('user_id')) {
@@ -34,12 +52,30 @@ exports.applyForAdoption = async (req, res) => {
                 }
                 return res.status(400).json({ error: "Referenced record (User or Pet) not found." });
             }
-            // Re-throw if it's not a foreign key error
             throw sqlError;
+        } finally {
+            connection.release();
         }
 
     } catch (error) {
         console.error("Adoption Application Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+exports.getUserAdoptions = async (req, res) => {
+    try {
+        const userId = req.user.id; // From auth middleware
+        const query = `
+            SELECT a.*, p.name as petName, p.image_url as petImage, p.breed, p.status as petStatus, p.age, p.gender
+            FROM adoptions a
+            JOIN pets p ON a.pet_id = p.id
+            WHERE a.user_id = ?
+        `;
+        const adoptions = await db.query(query, [userId]);
+        res.json({ success: true, adoptions: adoptions.rows });
+    } catch (error) {
+        console.error("Get User Adoptions Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };

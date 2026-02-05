@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/db');
+const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const emailService = require('../services/emailService');
@@ -331,5 +332,136 @@ exports.resetPassword = async (req, res) => {
     } catch (error) {
         console.error("Reset Password Error:", error);
         res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Get current user details
+exports.getMe = async (req, res) => {
+    try {
+        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts FROM users WHERE id = ?', [req.user.id]);
+        if (user.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update user profile
+exports.updateProfile = async (req, res) => {
+    const { name, phone_number } = req.body;
+
+    try {
+        const user = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (user.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await db.query(
+            'UPDATE users SET name = ?, phone_number = ? WHERE id = ?',
+            [name || user.rows[0].name, phone_number || user.rows[0].phone_number, req.user.id]
+        );
+
+        // Log activity
+        await logActivity(req.user.id, 'PROFILE_UPDATE', { name, phone_number });
+
+        const updatedUser = await db.query('SELECT id, name, email, phone_number, nic FROM users WHERE id = ?', [req.user.id]);
+
+        res.json({ success: true, user: updatedUser.rows[0] });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update Password
+exports.updatePassword = async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    try {
+        const users = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (users.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const user = users.rows[0];
+
+        // Verify current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Incorrect current password' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await db.query(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            [hashedPassword, req.user.id]
+        );
+
+        // Log activity
+        await logActivity(req.user.id, 'PASSWORD_CHANGE');
+
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update Notifications
+exports.updateNotifications = async (req, res) => {
+    const { email_notifications, sms_alerts } = req.body;
+
+    try {
+        await db.query(
+            'UPDATE users SET email_notifications = ?, sms_alerts = ? WHERE id = ?',
+            [email_notifications, sms_alerts, req.user.id]
+        );
+
+        res.json({ success: true, message: 'Notification preferences updated' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Delete Account
+exports.deleteAccount = async (req, res) => {
+    try {
+        // First, check if user exists
+        const userCheck = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Delete user's adoptions first (foreign key constraints)
+        // If there are other related tables, delete from them too
+        await db.query('DELETE FROM adoptions WHERE user_id = ?', [req.user.id]);
+
+        // Finally delete user
+        await db.query('DELETE FROM users WHERE id = ?', [req.user.id]);
+
+        res.json({ success: true, message: 'Account deleted successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Get User Activity Logs
+exports.getActivityLogs = async (req, res) => {
+    try {
+        const logs = await db.query(
+            'SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+            [req.user.id]
+        );
+        res.json({ success: true, logs: logs.rows });
+    } catch (err) {
+        console.error("Fetch Activity Logs Error:", err);
+        res.status(500).send('Server Error');
     }
 };
