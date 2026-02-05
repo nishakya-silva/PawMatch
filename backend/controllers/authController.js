@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const emailService = require('../services/emailService');
 
+const nicValidator = require('../utils/nicValidator');
+
 // Helper to generate 6 digit OTP
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -11,19 +13,26 @@ const generateOTP = () => {
 
 exports.register = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password, phone, nic } = req.body;
 
-        if (!email || !password || !name) {
-            return res.status(400).json({ error: 'Please enter all required fields' });
+        if (!email || !password || !name || !nic) {
+            return res.status(400).json({ error: 'Please enter all required fields including NIC' });
         }
 
-        // Check if user exists
+        // Validate Sri Lankan NIC using utility
+        const nicValidation = nicValidator(nic);
+        if (!nicValidation.valid) {
+            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
+        }
+        const cleanNic = nicValidation.nic; // Use the cleaned uppercase version
+
+        // Check if user exists (by email)
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
         if (userCheck.rows.length > 0) {
             const existingUser = userCheck.rows[0];
 
             if (existingUser.is_verified) {
-                return res.status(400).json({ error: 'User already exists' });
+                return res.status(400).json({ error: 'User already exists with this email' });
             }
 
             // Hash password
@@ -37,10 +46,18 @@ exports.register = async (req, res) => {
             const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
             // Update existing unverified user
-            await db.query(
-                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                [name, hashedPassword, phone || null, otpHash, otpExpiresAt, email]
-            );
+            // Also update NIC here if they are re-registering
+            try {
+                await db.query(
+                    'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                    [name, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt, email]
+                );
+            } catch (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({ error: 'This NIC is already registered to another account' });
+                }
+                throw err;
+            }
 
             // Send OTP
             await emailService.sendOTP(email, otp);
@@ -53,6 +70,12 @@ exports.register = async (req, res) => {
             });
         }
 
+        // Check if NIC exists separately for new user
+        const nicCheck = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
+        if (nicCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'This NIC is already registered' });
+        }
+
         // New User Logic
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -63,8 +86,8 @@ exports.register = async (req, res) => {
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [name, email, hashedPassword, phone || null, false, otpHash, otpExpiresAt]
+            'INSERT INTO users (name, email, password_hash, phone_number, nic, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, email, hashedPassword, phone || null, cleanNic, false, otpHash, otpExpiresAt]
         );
 
         await emailService.sendOTP(email, otp);
@@ -124,7 +147,8 @@ exports.verifyEmail = async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name
+                name: user.name,
+                nic: user.nic
             }
         };
 
@@ -217,7 +241,8 @@ exports.login = async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name
+                name: user.name,
+                nic: user.nic
             }
         };
 

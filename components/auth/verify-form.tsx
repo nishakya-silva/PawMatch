@@ -25,7 +25,7 @@ export function VerifyForm() {
         setMessage("")
         setError("")
         try {
-            const res = await fetch("http://localhost:5000/api/resend-otp", {
+            const res = await fetch("http://localhost:5001/api/resend-otp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
@@ -49,7 +49,7 @@ export function VerifyForm() {
         setMessage("")
 
         try {
-            const res = await fetch("http://localhost:5000/api/verify", {
+            const res = await fetch("http://localhost:5001/api/verify", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, otp }),
@@ -71,7 +71,7 @@ export function VerifyForm() {
 
             // Redirect
             // Redirect
-            window.location.href = "/"
+            window.location.href = "/profile"
 
         } catch (err: any) {
             setError(err.message)
