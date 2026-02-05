@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -21,15 +22,9 @@ exports.register = async (req, res) => {
         if (userCheck.rows.length > 0) {
             const existingUser = userCheck.rows[0];
 
-            // Optional: If user exists but is NOT verified, resend OTP?
-            // For now, consistent with prompt "Prevent duplicate accounts"
             if (existingUser.is_verified) {
                 return res.status(400).json({ error: 'User already exists' });
             }
-            // If they are not verified, we could overwrite/update, 
-            // but let's stick to standard error for now unless specifically asked to handle "resend" logic here.
-            // Actually, for a better UX, if I sign up and fail to verify, I might try to sign up again.
-            // Let's allow updating the pending user.
 
             // Hash password
             const salt = await bcrypt.genSalt(10);
@@ -49,9 +44,6 @@ exports.register = async (req, res) => {
 
             // Send OTP
             await emailService.sendOTP(email, otp);
-
-            // Log for dev purposes (in case email fails locally)
-            console.log(`DEV ONLY: OTP for ${email} is ${otp}`);
 
             return res.status(200).json({
                 success: true,
@@ -76,7 +68,6 @@ exports.register = async (req, res) => {
         );
 
         await emailService.sendOTP(email, otp);
-        console.log(`DEV ONLY: OTP for ${email} is ${otp}`);
 
         res.status(201).json({
             success: true,
@@ -158,6 +149,42 @@ exports.verifyEmail = async (req, res) => {
     }
 };
 
+exports.resendOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const user = userCheck.rows[0];
+        if (user.is_verified) {
+            return res.status(400).json({ error: "User already verified" });
+        }
+
+        // Generate new OTP
+        const otp = generateOTP();
+        const otpSalt = await bcrypt.genSalt(10);
+        const otpHash = await bcrypt.hash(otp, otpSalt);
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        await db.query(
+            'UPDATE users SET otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+            [otpHash, otpExpiresAt, email]
+        );
+
+        await emailService.sendOTP(email, otp);
+
+        res.json({ success: true, message: "OTP resent" });
+
+    } catch (error) {
+        console.error("Resend OTP Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -206,5 +233,86 @@ exports.login = async (req, res) => {
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+// Forgot Password - Initiate
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (users.rows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        // Generate secure random token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = await bcrypt.hash(resetToken, 10);
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        // Save token hash
+        await db.query(
+            'UPDATE users SET reset_token_hash = ?, reset_token_expires_at = ? WHERE email = ?',
+            [tokenHash, expiresAt, email]
+        );
+
+        // Send Link (Construct full URL based on frontend origin. Assuming localhost:3000 for dev)
+        // In prod, use environment variable for FRONTEND_URL
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+        await emailService.sendPasswordReset(email, resetLink);
+
+        res.json({ success: true, message: "Password reset link sent to your email" });
+
+    } catch (error) {
+        console.error("Forgot Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Reset Password - Complete
+exports.resetPassword = async (req, res) => {
+    try {
+        const { email, token, newPassword } = req.body;
+
+        if (!email || !token || !newPassword) {
+            return res.status(400).json({ error: "All fields are required" });
+        }
+
+        const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (users.rows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        const user = users.rows[0];
+
+        // Check if token expired
+        if (!user.reset_token_expires_at || new Date() > new Date(user.reset_token_expires_at)) {
+            return res.status(400).json({ error: "Reset link has expired" });
+        }
+
+        // Verify token
+        // Note: bcrypt checks hash. We store hash in DB.
+        const isMatch = await bcrypt.compare(token, user.reset_token_hash);
+        if (!isMatch) {
+            return res.status(400).json({ error: "Invalid reset token" });
+        }
+
+        // Update password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await db.query(
+            'UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = ?',
+            [hashedPassword, user.id]
+        );
+
+        res.json({ success: true, message: "Password updated successfully" });
+
+    } catch (error) {
+        console.error("Reset Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
     }
 };

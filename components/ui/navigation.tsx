@@ -1,13 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/providers/auth-provider"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Heart, Dog } from "lucide-react"
+import { Menu, X, Heart, Dog, User as UserIcon, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = () => {
+    logout()
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -42,9 +58,22 @@ export function Navigation() {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost" asChild>
-              <Link href="/login">Sign In</Link>
-            </Button>
+            {user ? (
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium">
+                  Hi, {user.name?.split(' ')[0] || 'User'}
+                </span>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Button variant="ghost" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+            )}
+
             <Button asChild>
               <Link href="/quiz">
                 <Heart className="w-4 h-4 mr-2" />
@@ -81,9 +110,20 @@ export function Navigation() {
             For Shelters
           </Link>
           <div className="flex flex-col gap-2 pt-4 border-t border-border">
-            <Button variant="outline" asChild>
-              <Link href="/login">Sign In</Link>
-            </Button>
+            {user ? (
+              <>
+                <div className="flex items-center justify-between py-2">
+                  <span className="font-medium">Signed in as {user.name}</span>
+                </div>
+                <Button variant="outline" onClick={handleLogout}>
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+            )}
             <Button asChild>
               <Link href="/quiz">Find Your Match</Link>
             </Button>

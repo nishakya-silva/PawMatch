@@ -8,23 +8,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dog, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/providers/auth-provider"
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
   const [error, setError] = useState("")
+  const { login } = useAuth()
+  const router = useRouter()
   // We might want to use useRouter here too if we want to redirect
   // import { useRouter } from "next/navigation" is missing in imports, need to add it or assumes imports are handled
-  // Wait, I am editing the file, I need to make sure I add the import if I use it. 
-  // Let's rely on the user manually adding the import if I don't touch imports? No, I should do it properly.
-  // I will assume I can update imports in a separate call or do a multi-replace.
-  // Actually, I can avoid navigation for a second and just console log success, but usually we redirect.
-  // Let me replace the imports too.
 
-  // This tool call only replaces one block. I should probably use multi_replace for imports + logic.
-  // But for now, let's just create the logic and I will do a separate call for imports if needed.
-  // actually, let's just make the request.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,12 +53,10 @@ export function LoginForm() {
       }
 
       // Save token
-      localStorage.setItem("token", data.token)
-      localStorage.setItem("user", JSON.stringify(data.user))
+      login(data.token, data.user)
 
-      // Hard redirect for now since I didn't import useRouter
-      window.location.href = "/dashboard"
-
+      // Redirect to home page
+      router.push("/")
     } catch (err: any) {
       setError(err.message)
     } finally {

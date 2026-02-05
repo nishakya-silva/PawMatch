@@ -20,6 +20,28 @@ export function VerifyForm() {
     const [error, setError] = useState("")
     const [message, setMessage] = useState("")
 
+    const handleResend = async () => {
+        setIsLoading(true)
+        setMessage("")
+        setError("")
+        try {
+            const res = await fetch("http://localhost:5000/api/resend-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Failed to resend")
+            setMessage("OTP resent successfully!")
+
+        } catch (err: any) {
+            setError(err.message)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsLoading(true)
@@ -47,9 +69,9 @@ export function VerifyForm() {
                 localStorage.setItem("user", JSON.stringify(data.user))
             }
 
-            setTimeout(() => {
-                router.push("/dashboard")
-            }, 1500)
+            // Redirect
+            // Redirect
+            window.location.href = "/"
 
         } catch (err: any) {
             setError(err.message)
@@ -126,7 +148,12 @@ export function VerifyForm() {
                     <div className="mt-6 text-center">
                         <p className="text-muted-foreground text-sm">
                             Didn't receive code?{" "}
-                            <button className="text-primary font-medium hover:underline">
+                            <button
+                                type="button"
+                                onClick={handleResend}
+                                className="text-primary font-medium hover:underline"
+                                disabled={isLoading}
+                            >
                                 Resend
                             </button>
                         </p>

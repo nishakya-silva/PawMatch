@@ -17,18 +17,17 @@ if (isSMTPConfigured) {
         },
     });
 } else {
-    console.warn("⚠️ SMTP Config missing. Emails will NOT be sent. OTPs will be logged to console.");
+    console.warn("⚠️ SMTP Config missing. Emails will NOT be sent (OTPs logged to console).");
 }
 
 exports.sendOTP = async (email, otp) => {
-    // Always log for development so you aren't stuck if email fails
     console.log(`\n==================================================`);
     console.log(`🔐 OTP for ${email}: ${otp}`);
     console.log(`==================================================\n`);
 
     if (!isSMTPConfigured) {
         console.log("ℹ️ Skipping email send (no SMTP config).");
-        return true; // Return true so the flow continues smoothly for testing
+        return true;
     }
 
     try {
@@ -52,9 +51,57 @@ exports.sendOTP = async (email, otp) => {
         console.log("Message sent: %s", info.messageId);
         return true;
     } catch (error) {
-        console.error("❌ Error sending email:", error);
-        // We return false here to indicate email failure, but depending on requirements we might want to let the user proceed if we logged it.
-        // For now, let's allow it to 'fail' essentially, but since we logged the OTP, the developer can still proceed.
+        console.error("❌ Error sending email:", error.message);
+
+        // Help user debug Gmail issues
+        if (error.responseCode === 535) {
+            console.error("\n💡 GMAIL TIP: You probably need an App Password.");
+            console.error("   1. Enable 2-Step Verification in your Google Account.");
+            console.error("   2. Go to https://myaccount.google.com/apppasswords");
+            console.error("   3. Generate an 'App Password' (select 'Mail' and 'Mac' or custom name).");
+            console.error("   4. Use that 16-character code as your SMTP_PASS in .env.");
+        }
+        return false;
+    }
+};
+
+exports.sendPasswordReset = async (email, resetAppUrl) => {
+    console.log(`\n==================================================`);
+    console.log(`🔑 Reset Link for ${email}: ${resetAppUrl}`);
+    console.log(`==================================================\n`);
+
+    if (!isSMTPConfigured) {
+        return true; // Pretend success
+    }
+
+    try {
+        const info = await transporter.sendMail({
+            from: `"${process.env.SMTP_FROM_NAME || 'PawMatch'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+            to: email,
+            subject: "Reset Your Password - PawMatch",
+            text: `You requested a password reset. Please use the following link: ${resetAppUrl}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="color: #4F46E5;">Reset Your Password</h2>
+                    <p>You requested a password reset for your PawMatch account.</p>
+                    <p>Click the button below to reset it:</p>
+                    <a href="${resetAppUrl}" style="background: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">Reset Password</a>
+                    <p>If you didn't request this, please ignore this email.</p>
+                </div>
+            `,
+        });
+
+        console.log("Message sent: %s", info.messageId);
+        return true;
+    } catch (error) {
+        console.error("❌ Error sending email:", error.message);
+        if (error.responseCode === 535) {
+            console.error("\n💡 GMAIL TIP: You probably need an App Password.");
+            console.error("   1. Enable 2-Step Verification in your Google Account.");
+            console.error("   2. Go to https://myaccount.google.com/apppasswords");
+            console.error("   3. Generate an 'App Password'.");
+            console.error("   4. Use that 16-character code as your SMTP_PASS in .env.");
+        }
         return false;
     }
 };
