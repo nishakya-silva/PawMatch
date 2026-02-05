@@ -59,27 +59,60 @@ export function Navigation() {
 
           <div className="hidden md:flex items-center gap-4">
             {user ? (
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium">
-                  Hi, {user.name?.split(' ')[0] || 'User'}
-                </span>
-                <Button variant="ghost" size="sm" onClick={handleLogout}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
+              <>
+                {/* User Profile Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full">
+                      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer">
+                        {user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                      </div>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.name}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile" className="cursor-pointer">
+                        <UserIcon className="w-4 h-4 mr-2" />
+                        My Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard" className="cursor-pointer">
+                        <Heart className="w-4 h-4 mr-2" />
+                        My Matches
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button asChild>
+                  <Link href="/quiz">
+                    <Heart className="w-4 h-4 mr-2" />
+                    Find Your Match
+                  </Link>
                 </Button>
-              </div>
+              </>
             ) : (
-              <Button variant="ghost" asChild>
-                <Link href="/login">Sign In</Link>
-              </Button>
+              <>
+                <Button variant="ghost" asChild>
+                  <Link href="/login">Sign In</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Sign Up</Link>
+                </Button>
+              </>
             )}
-
-            <Button asChild>
-              <Link href="/quiz">
-                <Heart className="w-4 h-4 mr-2" />
-                Find Your Match
-              </Link>
-            </Button>
           </div>
 
           <button className="md:hidden p-2" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">
@@ -112,21 +145,37 @@ export function Navigation() {
           <div className="flex flex-col gap-2 pt-4 border-t border-border">
             {user ? (
               <>
-                <div className="flex items-center justify-between py-2">
-                  <span className="font-medium">Signed in as {user.name}</span>
+                {/* User Profile Section */}
+                <div className="flex items-center gap-3 py-2">
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+                    {user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-sm">{user.name}</span>
+                    <span className="text-xs text-muted-foreground">{user.email}</span>
+                  </div>
                 </div>
-                <Button variant="outline" onClick={handleLogout}>
+                <Button variant="outline" asChild>
+                  <Link href="/profile">
+                    <UserIcon className="w-4 h-4 mr-2" />
+                    My Profile
+                  </Link>
+                </Button>
+                <Button variant="outline" onClick={handleLogout} className="text-destructive hover:text-destructive">
+                  <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </Button>
               </>
             ) : (
-              <Button variant="outline" asChild>
-                <Link href="/login">Sign In</Link>
-              </Button>
+              <>
+                <Button variant="outline" asChild>
+                  <Link href="/login">Sign In</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/register">Sign Up</Link>
+                </Button>
+              </>
             )}
-            <Button asChild>
-              <Link href="/quiz">Find Your Match</Link>
-            </Button>
           </div>
         </div>
       </div>

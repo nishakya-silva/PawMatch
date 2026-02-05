@@ -64,7 +64,7 @@ export function WelfareDashboard() {
     const fetchDashboard = async () => {
       try {
         // Hardcoded adoptionId for demo
-        const res = await fetch('http://localhost:5000/api/welfare/1')
+        const res = await fetch('http://localhost:5001/api/welfare/1')
         if (!res.ok) throw new Error("Failed to fetch")
         const data = await res.json()
 
