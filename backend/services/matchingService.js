@@ -21,91 +21,90 @@ class MatchingService {
 
             // --- Hard Filters ---
 
-            // Living Situation
-            // Pet's living_situation_match is JSONB like {"apartment": false, "house_small": true}
-            const livingSituation = userProfile['1']; // Question ID 1
+            // Living Situation (Q1)
+            const livingSituation = userProfile['1'];
             if (pet.living_situation_match && pet.living_situation_match[livingSituation] === false) {
-                isDisqualified = true; // Pet strictly cannot live here
+                isDisqualified = true;
             } else if (pet.living_situation_match && pet.living_situation_match[livingSituation] === true) {
-                score += 10; // Perfect environment
+                score += 15;
+                reasons.push(`Perfect fit for your ${livingSituation.replace('_', ' ')}`);
             }
 
-            // Household (Kids)
-            const household = userProfile['4']; // Question ID 4
-            const hasKids = household === 'family_young' || household === 'family_older';
+            // Household (Q4)
+            const household = userProfile['4'];
             const hasYoungKids = household === 'family_young';
-
             if (hasYoungKids && pet.social_profile && pet.social_profile.kids === false) {
-                isDisqualified = true; // Not good with young kids
+                isDisqualified = true;
+            } else if (hasYoungKids && pet.social_profile && pet.social_profile.kids === true) {
+                score += 10;
+                reasons.push("Great with young children");
             }
 
-            // Existing Pets
-            const existingPets = userProfile['6']; // Question ID 6
+            // Existing Pets (Q6)
+            const existingPets = userProfile['6'];
             if (existingPets === 'dog' && pet.social_profile && pet.social_profile.dogs === false) {
                 isDisqualified = true;
+            } else if (existingPets === 'dog' && pet.social_profile && pet.social_profile.dogs === true) {
+                score += 10;
+                reasons.push("Friendly toward your other dogs");
             }
             if (existingPets === 'cat' && pet.social_profile && pet.social_profile.cats === false) {
                 isDisqualified = true;
             }
 
+            // Environment (Q7)
+            const environment = userProfile['7']; // urban, suburban, semi_rural, rural
+            if (environment === 'urban' && (pet.energy_level === 'athletic' || pet.size === 'Large')) {
+                score -= 10; // Urban might be tough for very large/athletic dogs
+            } else if (environment === 'rural') {
+                score += 5; // Most dogs love rural
+            }
+
             // --- Weighted Scoring ---
 
-            // Activity Level (Question 2)
+            // Activity Level (Q2)
             const userActivity = userProfile['2'];
-            const activityMap = {
-                'sedentary': 1,
-                'moderate': 2,
-                'active': 3,
-                'athletic': 4
-            };
-
-            const petEnergyMap = {
-                'sedentary': 1,
-                'low': 1,
-                'moderate': 2,
-                'active': 3,
-                'athletic': 4,
-                'high': 4
-            };
-
+            const activityMap = { 'sedentary': 1, 'moderate': 2, 'active': 3, 'athletic': 4 };
+            const petEnergyMap = { 'sedentary': 1, 'low': 1, 'moderate': 2, 'active': 3, 'athletic': 4, 'high': 4 };
             const userLevel = activityMap[userActivity] || 2;
             const petLevel = petEnergyMap[pet.energy_level] || 2;
             const diff = Math.abs(userLevel - petLevel);
 
             if (diff === 0) {
-                score += 30; // Perfect match
-                reasons.push("Energy level matches yours perfectly");
+                score += 30;
+                reasons.push("Matches your energy level perfectly");
             } else if (diff === 1) {
-                score += 15; // Good match
+                score += 15;
             } else {
-                score -= 10; // Mismatch
+                score -= 15;
             }
 
-            // Experience Level (Question 5)
-            const experience = userProfile['5']; // first, some, experienced, expert
+            // Experience Level (Q5)
+            const experience = userProfile['5'];
             if (experience === 'first' && (pet.energy_level === 'athletic' || pet.energy_level === 'high')) {
-                score -= 20; // High energy dogs are hard for first timers
-            }
-
-            // Time Availability (Question 3)
-            const time = userProfile['3']; // limited, moderate, flexible, full
-            if (time === 'limited' && (pet.energy_level === 'active' || pet.energy_level === 'athletic')) {
-                score -= 30; // Not enough time for high energy dog
-                isDisqualified = true; // Preventing neglect
-            }
-
-            // Social Compatibility
-            if (existingPets === 'dog' && pet.social_profile && pet.social_profile.dogs) {
+                score -= 20;
+            } else if (experience === 'expert') {
                 score += 10;
-                reasons.push("Good with other dogs");
             }
+
+            // Time Availability (Q3)
+            const timeAvailable = userProfile['3'];
+            if (timeAvailable === 'limited' && (pet.energy_level === 'active' || pet.energy_level === 'athletic')) {
+                isDisqualified = true; // Still disqualifying for safety
+            } else if (timeAvailable === 'full') {
+                score += 10;
+                reasons.push("Ideal for someone with a lot of time to bond");
+            }
+
+            // Final Normalization
+            const matchScore = Math.max(0, Math.min(100, score + 40));
 
             return {
                 ...pet,
-                matchScore: Math.max(0, Math.min(100, score + 50)), // Normalize somewhat to 0-100 base 50
-                matchReasons: reasons,
+                matchScore,
+                matchReasons: reasons.slice(0, 3), // Limit to top 3 reasons
                 isDisqualified,
-                profile_image_url: pet.image_url // Frontend expects this key
+                profile_image_url: pet.image_url
             };
         });
 

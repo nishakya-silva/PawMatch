@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../config/db');
+const { logActivity } = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const emailService = require('../services/emailService');
@@ -24,77 +25,65 @@ exports.register = async (req, res) => {
         if (!nicValidation.valid) {
             return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
         }
-        const cleanNic = nicValidation.nic; // Use the cleaned uppercase version
+        const cleanNic = nicValidation.nic;
 
-        // Check if user exists (by email)
+        // 1. Check if user already exists in main users table
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
         if (userCheck.rows.length > 0) {
-            const existingUser = userCheck.rows[0];
-
-            if (existingUser.is_verified) {
-                return res.status(400).json({ error: 'User already exists with this email' });
-            }
-
-            // Hash password
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, salt);
-
-            // Generate OTP
-            const otp = generateOTP();
-            const otpSalt = await bcrypt.genSalt(10);
-            const otpHash = await bcrypt.hash(otp, otpSalt);
-            const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-            // Update existing unverified user
-            // Also update NIC here if they are re-registering
-            try {
-                await db.query(
-                    'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                    [name, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt, email]
-                );
-            } catch (err) {
-                if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(400).json({ error: 'This NIC is already registered to another account' });
-                }
-                throw err;
-            }
-
-            // Send OTP
-            await emailService.sendOTP(email, otp);
-
-            return res.status(200).json({
-                success: true,
-                message: 'Registration successful. Please verify your email.',
-                requiresVerification: true,
-                email: email
-            });
+            return res.status(400).json({ error: 'User already exists with this email' });
         }
 
-        // Check if NIC exists separately for new user
-        const nicCheck = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
-        if (nicCheck.rows.length > 0) {
+        // 2. Check if NIC already exists in main table
+        const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
+        if (nicCheckMain.rows.length > 0) {
             return res.status(400).json({ error: 'This NIC is already registered' });
         }
 
-        // New User Logic
+        // Hash password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Generate OTP
         const otp = generateOTP();
         const otpSalt = await bcrypt.genSalt(10);
         const otpHash = await bcrypt.hash(otp, otpSalt);
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-        await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, nic, is_verified, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, email, hashedPassword, phone || null, cleanNic, false, otpHash, otpExpiresAt]
-        );
+        // 3. Check if exists in pending_users
+        const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
+
+        if (pendingCheck.rows.length > 0) {
+            // Update existing pending record
+            try {
+                await db.query(
+                    'UPDATE pending_users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                    [name, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt, email]
+                );
+            } catch (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
+                }
+                throw err;
+            }
+        } else {
+            // Check if NIC is in another pending record
+            const nicCheckPending = await db.query('SELECT * FROM pending_users WHERE nic = ?', [cleanNic]);
+            if (nicCheckPending.rows.length > 0) {
+                return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
+            }
+
+            // Insert into pending_users
+            await db.query(
+                'INSERT INTO pending_users (name, email, password_hash, phone_number, nic, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [name, email, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt]
+            );
+        }
 
         await emailService.sendOTP(email, otp);
 
-        res.status(201).json({
+        res.status(200).json({
             success: true,
-            message: 'User registered. Please check your email for verification code.',
+            message: 'Verification code sent to your email.',
             requiresVerification: true,
             email: email
         });
@@ -113,42 +102,44 @@ exports.verifyEmail = async (req, res) => {
             return res.status(400).json({ error: 'Email and OTP are required' });
         }
 
-        // Find user
-        const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (users.rows.length === 0) {
-            return res.status(400).json({ error: 'User not found' });
+        // Find user in pending_users
+        const pendingUsers = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
+        if (pendingUsers.rows.length === 0) {
+            return res.status(400).json({ error: 'Verification record not found or already verified' });
         }
 
-        const user = users.rows[0];
-
-        if (user.is_verified) {
-            return res.status(400).json({ error: 'User already verified' });
-        }
+        const pendingUser = pendingUsers.rows[0];
 
         // Check expiration
-        if (new Date() > new Date(user.otp_expires_at)) {
+        if (new Date() > new Date(pendingUser.otp_expires_at)) {
             return res.status(400).json({ error: 'OTP has expired' });
         }
 
         // Verify OTP
-        const isMatch = await bcrypt.compare(otp, user.otp_hash);
+        const isMatch = await bcrypt.compare(otp, pendingUser.otp_hash);
         if (!isMatch) {
             return res.status(400).json({ error: 'Invalid OTP' });
         }
 
-        // Setup verified
-        await db.query(
-            'UPDATE users SET is_verified = TRUE, otp_hash = NULL, otp_expires_at = NULL WHERE id = ?',
-            [user.id]
+        // Move to users table
+        const insertRes = await db.query(
+            'INSERT INTO users (name, email, password_hash, phone_number, nic, is_verified) VALUES (?, ?, ?, ?, ?, TRUE)',
+            [pendingUser.name, pendingUser.email, pendingUser.password_hash, pendingUser.phone_number, pendingUser.nic]
         );
+
+        // Get the new user ID (mysql specific structure from our db wrapper)
+        const userId = insertRes.rows.insertId;
+
+        // Delete from pending
+        await db.query('DELETE FROM pending_users WHERE id = ?', [pendingUser.id]);
 
         // Generate token for auto-login
         const payload = {
             user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                nic: user.nic
+                id: userId,
+                email: pendingUser.email,
+                name: pendingUser.name,
+                nic: pendingUser.nic
             }
         };
 
@@ -178,15 +169,17 @@ exports.resendOTP = async (req, res) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: "Email is required" });
 
-        const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (userCheck.rows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+        const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
+        if (pendingCheck.rows.length === 0) {
+            // Check if already verified in users table
+            const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+            if (userCheck.rows.length > 0) {
+                return res.status(400).json({ error: "User already verified" });
+            }
+            return res.status(404).json({ error: "Verification record not found" });
         }
 
-        const user = userCheck.rows[0];
-        if (user.is_verified) {
-            return res.status(400).json({ error: "User already verified" });
-        }
+        const user = pendingCheck.rows[0];
 
         // Generate new OTP
         const otp = generateOTP();
@@ -195,7 +188,7 @@ exports.resendOTP = async (req, res) => {
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
         await db.query(
-            'UPDATE users SET otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+            'UPDATE pending_users SET otp_hash = ?, otp_expires_at = ? WHERE email = ?',
             [otpHash, otpExpiresAt, email]
         );
 
@@ -216,19 +209,19 @@ exports.login = async (req, res) => {
         // Check for user
         const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
         if (users.rows.length === 0) {
+            // Check if it's a pending account
+            const pending = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
+            if (pending.rows.length > 0) {
+                return res.status(403).json({
+                    error: 'Please verify your email before logging in.',
+                    requiresVerification: true,
+                    email: email
+                });
+            }
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
         const user = users.rows[0];
-
-        // Check verification status
-        if (!user.is_verified) {
-            return res.status(403).json({
-                error: 'Please verify your email before logging in.',
-                requiresVerification: true,
-                email: user.email
-            });
-        }
 
         // Validate password
         const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -236,7 +229,7 @@ exports.login = async (req, res) => {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
-        // Create JWT
+        // Create JWT (The is_verified check is no longer needed if we only keep verified users in the main table)
         const payload = {
             user: {
                 id: user.id,
@@ -339,5 +332,136 @@ exports.resetPassword = async (req, res) => {
     } catch (error) {
         console.error("Reset Password Error:", error);
         res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Get current user details
+exports.getMe = async (req, res) => {
+    try {
+        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts FROM users WHERE id = ?', [req.user.id]);
+        if (user.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update user profile
+exports.updateProfile = async (req, res) => {
+    const { name, phone_number } = req.body;
+
+    try {
+        const user = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (user.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await db.query(
+            'UPDATE users SET name = ?, phone_number = ? WHERE id = ?',
+            [name || user.rows[0].name, phone_number || user.rows[0].phone_number, req.user.id]
+        );
+
+        // Log activity
+        await logActivity(req.user.id, 'PROFILE_UPDATE', { name, phone_number });
+
+        const updatedUser = await db.query('SELECT id, name, email, phone_number, nic FROM users WHERE id = ?', [req.user.id]);
+
+        res.json({ success: true, user: updatedUser.rows[0] });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update Password
+exports.updatePassword = async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    try {
+        const users = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (users.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const user = users.rows[0];
+
+        // Verify current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Incorrect current password' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await db.query(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            [hashedPassword, req.user.id]
+        );
+
+        // Log activity
+        await logActivity(req.user.id, 'PASSWORD_CHANGE');
+
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Update Notifications
+exports.updateNotifications = async (req, res) => {
+    const { email_notifications, sms_alerts } = req.body;
+
+    try {
+        await db.query(
+            'UPDATE users SET email_notifications = ?, sms_alerts = ? WHERE id = ?',
+            [email_notifications, sms_alerts, req.user.id]
+        );
+
+        res.json({ success: true, message: 'Notification preferences updated' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Delete Account
+exports.deleteAccount = async (req, res) => {
+    try {
+        // First, check if user exists
+        const userCheck = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Delete user's adoptions first (foreign key constraints)
+        // If there are other related tables, delete from them too
+        await db.query('DELETE FROM adoptions WHERE user_id = ?', [req.user.id]);
+
+        // Finally delete user
+        await db.query('DELETE FROM users WHERE id = ?', [req.user.id]);
+
+        res.json({ success: true, message: 'Account deleted successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+};
+
+// Get User Activity Logs
+exports.getActivityLogs = async (req, res) => {
+    try {
+        const logs = await db.query(
+            'SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+            [req.user.id]
+        );
+        res.json({ success: true, logs: logs.rows });
+    } catch (err) {
+        console.error("Fetch Activity Logs Error:", err);
+        res.status(500).send('Server Error');
     }
 };

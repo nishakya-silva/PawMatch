@@ -73,6 +73,7 @@ Created a comprehensive profile page at `/profile` with the following sections:
   - Added "National ID (NIC)" field to Registration form.
   - Implemented server-side NIC validation **using a custom `nicValidator` utility** (Checks birth year, gender logic, leap years, **dummy sequences**, **suspicious age flagging**).
   - Implemented unique NIC check (One account per ID).
+  - **New Registration Flow**: Users are now stored in a temporary `pending_users` table during the verification phase. They are only added to the main `users` table after successful email verification, keeping the main database clean of unverified entries.
   - Added NIC to JWT token payload for frontend access.
   - Profile page displays "ID Verified" status.
 
