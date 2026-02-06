@@ -7,11 +7,17 @@ interface User {
     id: number
     email: string
     name: string
+
+    role?: string
+    shelter_name?: string
+    verification_status?: string
+
     nic?: string
     phone_number?: string
     email_notifications?: boolean
     sms_alerts?: boolean
     created_at?: string
+
 }
 
 interface AuthContextType {

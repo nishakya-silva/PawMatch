@@ -60,9 +60,8 @@ export function Navigation() {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
-            {isLoading ? (
-              <div className="w-20 h-9 bg-muted animate-pulse rounded-md" />
-            ) : user ? (
+            {user ? (
+
               <>
                 {/* User Profile Dropdown */}
                 <DropdownMenu>
@@ -105,6 +104,7 @@ export function Navigation() {
                     <Heart className="w-4 h-4 mr-2" />
                     Find Your Match
                   </Link>
+
                 </Button>
               </>
             ) : (
@@ -117,6 +117,7 @@ export function Navigation() {
                 </Button>
               </>
             )}
+
           </div>
 
           <button className="md:hidden p-2" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">
@@ -187,6 +188,14 @@ export function Navigation() {
                 </Button>
               </>
             )}
+
+
+            {user?.role !== 'shelter' && user?.role !== 'admin' && (
+              <Button asChild>
+                <Link href="/quiz">Find Your Match</Link>
+              </Button>
+            )}
+
           </div>
         </div>
       </div>

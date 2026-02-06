@@ -75,4 +75,11 @@ router.post('/reports', reportController.submitReport);
 router.get('/reports', reportController.getRecentReports);
 router.delete('/reports/:id', reportController.deleteReport);
 
+// Admin / Shelter Verification Routes
+const adminController = require('../controllers/adminController');
+router.post('/shelters/verify-request', adminController.uploadVerificationDoc, adminController.submitVerification);
+router.get('/admin/pending-shelters', adminController.getPendingShelters);
+router.post('/admin/verify-shelter', adminController.verifyShelter);
+router.get('/admin/stats', adminController.getStats);
+
 module.exports = router;
