@@ -1,7 +1,12 @@
+"use client"
+
+import { useAuth } from "@/components/providers/auth-provider"
 import Link from "next/link"
 import { Dog, Heart, Mail, MapPin, Phone } from "lucide-react"
 
 export function Footer() {
+  const { user, isLoading } = useAuth()
+  
   return (
     <footer className="bg-foreground text-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -38,11 +43,13 @@ export function Footer() {
                   Welfare Tracker
                 </Link>
               </li>
-              <li>
-                <Link href="/shelters" className="hover:text-background transition-colors">
-                  Partner Shelters
-                </Link>
-              </li>
+              {!isLoading && !user && (
+                <li>
+                  <Link href="/shelters" className="hover:text-background transition-colors">
+                    Partner Shelters
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -66,7 +73,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/report" className="hover:text-background transition-colors">
+                <Link href="/community-report" className="hover:text-background transition-colors">
                   Report an Animal
                 </Link>
               </li>

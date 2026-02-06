@@ -50,6 +50,11 @@ router.post('/pets', petController.uploadMiddleware, petController.addPet);
 router.get('/pets', petController.getAllPets);
 router.get('/pets/:id', petController.getPetById);
 
+// Demo Routes
+const demoController = require('../controllers/demoController');
+router.post('/demo/request', demoController.requestDemo);
+router.get('/demo/requests', demoController.getDemoRequests); // For admin dashboard
+
 // Visit Routes
 const visitController = require('../controllers/visitController');
 router.post('/visits', auth, visitController.scheduleVisit);

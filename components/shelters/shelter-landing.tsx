@@ -1,7 +1,23 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, BarChart3, Bell, CheckCircle, Clock, Shield, Users, Zap } from "lucide-react"
+import { ArrowRight, BarChart3, Bell, CheckCircle, Clock, Shield, Users, Zap, Mail, Building2, User } from "lucide-react"
 import Link from "next/link"
+import { useState } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
 
 const benefits = [
   {
@@ -43,6 +59,42 @@ const stats = [
 ]
 
 export function ShelterLanding() {
+  const [isDemoOpen, setIsDemoOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    shelterName: "",
+    message: ""
+  })
+
+  const handleDemoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    try {
+      const res = await fetch("http://localhost:5000/api/demo/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        toast.success("Demo request sent successfully!")
+        setIsDemoOpen(false)
+        setFormData({ name: "", email: "", shelterName: "", message: "" })
+      } else {
+        toast.error(data.error || "Failed to send request")
+      }
+    } catch (err) {
+      toast.error("An error occurred. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div>
       {/* Hero */}
@@ -62,23 +114,113 @@ export function ShelterLanding() {
                 animal finds a compatible forever home.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" asChild>
+                <Button size="lg" asChild className="rounded-2xl h-14 px-8 text-base font-bold shadow-lg shadow-primary/20">
                   <Link href="/shelters/register">
                     Become a Partner
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="/shelters/demo">Request Demo</Link>
-                </Button>
+
+                <Dialog open={isDemoOpen} onOpenChange={setIsDemoOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="lg" variant="outline" className="rounded-2xl h-14 px-8 text-base font-bold border-primary/20 hover:bg-primary/5 transition-all">
+                      Request Demo
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px] rounded-[2rem] p-8 border-none shadow-2xl">
+                    <DialogHeader className="space-y-3 mb-6">
+                      <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mb-2">
+                        <Users className="w-6 h-6 text-primary" />
+                      </div>
+                      <DialogTitle className="text-3xl font-extrabold tracking-tight">Request a Demo</DialogTitle>
+                      <DialogDescription className="text-base leading-relaxed">
+                        See how PawMatch can transform your shelter's adoption outcomes.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleDemoSubmit} className="space-y-5">
+                      <div className="grid gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="name" className="text-sm font-bold uppercase tracking-wider text-muted-foreground ml-1">Full Name</Label>
+                          <div className="relative">
+                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              id="name"
+                              placeholder="John Doe"
+                              className="pl-11 h-12 rounded-xl bg-muted/30 border-none focus-visible:ring-primary"
+                              value={formData.name}
+                              onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="email" className="text-sm font-bold uppercase tracking-wider text-muted-foreground ml-1">Email Address</Label>
+                          <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="john@shelter.com"
+                              className="pl-11 h-12 rounded-xl bg-muted/30 border-none focus-visible:ring-primary"
+                              value={formData.email}
+                              onChange={e => setFormData(p => ({ ...p, email: e.target.value }))}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="shelterName" className="text-sm font-bold uppercase tracking-wider text-muted-foreground ml-1">Shelter Name</Label>
+                          <div className="relative">
+                            <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              id="shelterName"
+                              placeholder="Green Valley Animal Shelter"
+                              className="pl-11 h-12 rounded-xl bg-muted/30 border-none focus-visible:ring-primary"
+                              value={formData.shelterName}
+                              onChange={e => setFormData(p => ({ ...p, shelterName: e.target.value }))}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="message" className="text-sm font-bold uppercase tracking-wider text-muted-foreground ml-1">Optional Message</Label>
+                          <Textarea
+                            id="message"
+                            placeholder="Tell us a bit about your shelter..."
+                            className="rounded-xl bg-muted/30 border-none focus-visible:ring-primary min-h-[100px]"
+                            value={formData.message}
+                            onChange={e => setFormData(p => ({ ...p, message: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter className="pt-4">
+                        <Button type="submit" className="w-full h-14 rounded-2xl text-lg font-extrabold shadow-lg shadow-primary/20" disabled={isSubmitting}>
+                          {isSubmitting ? "Sending..." : "Submit Request"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
-            <div className="relative">
+            <div className="relative group">
+              <div className="absolute -inset-4 bg-gradient-to-r from-primary to-accent rounded-[2.5rem] blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
               <img
-                src="/placeholder.svg?height=500&width=600"
+                src="https://images.unsplash.com/photo-1450778869180-41d0601e046e?q=80&w=2000&auto=format&fit=crop"
                 alt="Partner shelter"
-                className="rounded-2xl shadow-xl"
+                className="relative rounded-3xl shadow-2xl border-4 border-white object-cover w-full h-[500px]"
               />
+              <div className="absolute -bottom-6 -right-6 bg-white p-6 rounded-[2rem] shadow-xl max-w-xs hidden xl:block border border-primary/10">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  </div>
+                  <span className="font-bold text-sm">Verified Partner</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Join 50+ professional shelters improving adoption outcomes daily.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -154,12 +296,14 @@ export function ShelterLanding() {
                 </Link>
               </Button>
             </div>
-            <div className="rounded-2xl overflow-hidden shadow-2xl border border-border">
+            <div className="rounded-3xl overflow-hidden shadow-2xl border-8 border-white ring-1 ring-black/5 relative group">
+              <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500" />
               <img
-                src="/placeholder.svg?height=500&width=700"
+                src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=2000&auto=format&fit=crop"
                 alt="Shelter dashboard preview"
                 className="w-full h-auto"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
             </div>
           </div>
         </div>

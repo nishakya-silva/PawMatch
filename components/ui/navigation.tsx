@@ -18,7 +18,7 @@ import {
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, logout, isLoading } = useAuth()
   const router = useRouter()
 
   const handleLogout = () => {
@@ -52,13 +52,17 @@ export function Navigation() {
             <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
               Welfare Tracker
             </Link>
-            <Link href="/shelters" className="text-muted-foreground hover:text-foreground transition-colors">
-              For Shelters
-            </Link>
+            {!isLoading && !user && (
+              <Link href="/shelters" className="text-muted-foreground hover:text-foreground transition-colors">
+                For Shelters
+              </Link>
+            )}
           </div>
 
           <div className="hidden md:flex items-center gap-4">
-            {user ? (
+            {isLoading ? (
+              <div className="w-20 h-9 bg-muted animate-pulse rounded-md" />
+            ) : user ? (
               <>
                 {/* User Profile Dropdown */}
                 <DropdownMenu>
@@ -139,11 +143,18 @@ export function Navigation() {
           <Link href="/dashboard" className="block py-2 text-muted-foreground hover:text-foreground">
             Welfare Tracker
           </Link>
-          <Link href="/shelters" className="block py-2 text-muted-foreground hover:text-foreground">
-            For Shelters
-          </Link>
+          {!isLoading && !user && (
+            <Link href="/shelters" className="block py-2 text-muted-foreground hover:text-foreground">
+              For Shelters
+            </Link>
+          )}
           <div className="flex flex-col gap-2 pt-4 border-t border-border">
-            {user ? (
+            {isLoading ? (
+              <div className="space-y-2">
+                <div className="w-full h-9 bg-muted animate-pulse rounded-md" />
+                <div className="w-full h-9 bg-muted animate-pulse rounded-md" />
+              </div>
+            ) : user ? (
               <>
                 {/* User Profile Section */}
                 <div className="flex items-center gap-3 py-2">
