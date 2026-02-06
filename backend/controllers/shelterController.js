@@ -200,3 +200,47 @@ exports.getPotentialMatches = async (req, res) => {
         res.status(500).json({ error: "Server Error" });
     }
 };
+
+exports.getShelterPublicProfile = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Get Shelter Details
+        const shelterRes = await db.query(`
+            SELECT 
+                id, name, email, phone_number, role, shelter_name, 
+                shelter_description, shelter_address, shelter_logo_url, 
+                shelter_banner_url, shelter_social_links, shelter_website, 
+                shelter_tagline, verification_status 
+            FROM users 
+            WHERE id = ? AND role = 'shelter'
+        `, [id]);
+
+        const shelters = shelterRes.rows || shelterRes;
+        if (shelters.length === 0) {
+            return res.status(404).json({ error: "Shelter not found" });
+        }
+
+        const shelter = shelters[0];
+
+        // 2. Get Available Pets for this Shelter
+        const petsRes = await db.query(`
+            SELECT id, name, type, breed, age, gender, size, image_url, status, is_foster
+            FROM pets 
+            WHERE shelter_id = ? AND status = 'available'
+            ORDER BY created_at DESC
+        `, [id]);
+
+        const pets = petsRes.rows || petsRes;
+
+        res.json({
+            success: true,
+            shelter,
+            pets
+        });
+
+    } catch (error) {
+        console.error("Get Public Profile Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};

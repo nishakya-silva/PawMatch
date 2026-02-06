@@ -414,8 +414,8 @@ export function PetProfile({ id }: PetProfileProps) {
 
               <TabsContent value="traits" className="space-y-6 mt-4">
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {displayData.traits.map((trait: string) => (
-                    <Badge key={trait} variant="secondary" className="px-3 py-1 text-sm bg-primary/10 text-primary border-primary/20">
+                  {displayData.traits.map((trait: string, index: number) => (
+                    <Badge key={`${trait}-${index}`} variant="secondary" className="px-3 py-1 text-sm bg-primary/10 text-primary border-primary/20">
                       {trait}
                     </Badge>
                   ))}
@@ -596,7 +596,12 @@ export function PetProfile({ id }: PetProfileProps) {
 
           {/* Shelter info */}
           <div className="bg-muted/50 border border-border rounded-xl p-6">
-            <h3 className="font-semibold text-foreground mb-4">{displayData.shelter?.name || "Shelter Information"}</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground">{displayData.shelter?.name || "Shelter Information"}</h3>
+              <Button variant="link" className="p-0 h-auto text-primary" asChild>
+                <Link href={`/shelter/${pet.shelter_id}`}>View Shelter Profile</Link>
+              </Button>
+            </div>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Phone className="w-4 h-4" />

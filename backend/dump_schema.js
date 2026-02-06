@@ -1,22 +1,23 @@
 const db = require('./config/db');
+const fs = require('fs');
 
 async function getSchema() {
     try {
-        const tablesResult = await db.query('SHOW TABLES');
-        // Handle different return structures depending on mysql2 driver version/config
-        const rows = tablesResult.rows || tablesResult;
-        const tableNames = rows.map(r => Object.values(r)[0]);
+        const [adoptions] = await db.pool.query('DESCRIBE adoptions');
+        const [pets] = await db.pool.query('DESCRIBE pets');
+        const [users] = await db.pool.query('DESCRIBE users');
 
-        console.log("-- Database Schema Dump\n");
+        const schema = {
+            adoptions,
+            pets,
+            users
+        };
 
-        for (const table of tableNames) {
-            const createResult = await db.query(`SHOW CREATE TABLE \`${table}\``);
-            const createRows = createResult.rows || createResult;
-            console.log(createRows[0]['Create Table'] + ";\n");
-        }
+        fs.writeFileSync('schema_dump.json', JSON.stringify(schema, null, 2));
+        console.log('Schema dumped to schema_dump.json');
         process.exit(0);
-    } catch (err) {
-        console.error(err);
+    } catch (e) {
+        console.error(e);
         process.exit(1);
     }
 }
