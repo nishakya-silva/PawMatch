@@ -3,106 +3,136 @@ const db = require('../config/db');
 class MatchingService {
     async findMatches(userProfile) {
         // 1. Fetch all available pets
-        const result = await db.query("SELECT * FROM pets WHERE status = 'available'");
-        const pets = result.rows;
+        const res = await db.query("SELECT * FROM pets WHERE status = 'available'");
+        const pets = res.rows || res[0]; // Compatibility for both mysql2 and pg
 
-        // 2. Score each pet
+        // 2. Score each pet using weighted algorithm
         const scoredPets = pets.map(pet => {
-            // Helper to parse if string (MySQL compatibility)
-            const parseJson = (val) => (typeof val === 'string' ? JSON.parse(val) : val);
+            // Parse JSON fields if they are strings (typical in MySQL)
+            const parseJson = (val) => {
+                if (!val) return {};
+                if (typeof val === 'string') {
+                    try { return JSON.parse(val); } catch (e) { return {}; }
+                }
+                return val;
+            };
 
-            pet.living_situation_match = parseJson(pet.living_situation_match);
-            pet.social_profile = parseJson(pet.social_profile);
-            pet.temperament = parseJson(pet.temperament);
+            const social = parseJson(pet.social_profile);
+            const livingMatch = parseJson(pet.living_situation_match);
+            const temperament = parseJson(pet.temperament);
 
             let score = 0;
-            let reasons = []; // To explain match
+            let reasons = [];
             let isDisqualified = false;
 
-            // --- Hard Filters ---
+            // WEIGHTED CATEGORIES:
+            // Activity (25%), Time (20%), Space (20%), Experience (15%), Pets (10%), Neighborhood (10%)
 
-            // Living Situation (Q1)
-            const livingSituation = userProfile['1'];
-            if (pet.living_situation_match && pet.living_situation_match[livingSituation] === false) {
-                isDisqualified = true;
-            } else if (pet.living_situation_match && pet.living_situation_match[livingSituation] === true) {
-                score += 15;
-                reasons.push(`Perfect fit for your ${livingSituation.replace('_', ' ')}`);
+            // --- 1. Activity Level (25%) ---
+            const userActivity = userProfile['2']; // sedentary, moderate, active, athletic
+            const energyMap = { sedentary: 1, low: 1, moderate: 2, active: 3, athletic: 4, high: 4 };
+            const userEnergy = energyMap[userActivity] || 2;
+            const dogEnergy = energyMap[pet.energy_level] || 2;
+            const energyDiff = Math.abs(userEnergy - dogEnergy);
+
+            let activityPoints = 0;
+            if (energyDiff === 0) activityPoints = 100;
+            else if (energyDiff === 1) activityPoints = 70;
+            else activityPoints = 30;
+
+            score += activityPoints * 0.25;
+            if (activityPoints >= 70) reasons.push("Matches your activity level well");
+
+            // --- 2. Time Available (20%) ---
+            const userTime = userProfile['3']; // limited, moderate, flexible, full
+            let timePoints = 0;
+            if (userTime === 'full' || userTime === 'flexible') timePoints = 100;
+            else if (userTime === 'moderate') {
+                timePoints = (pet.energy_level === 'high' || pet.energy_level === 'athletic') ? 50 : 100;
+            } else { // limited
+                if (pet.energy_level === 'high' || pet.energy_level === 'athletic') {
+                    timePoints = 0;
+                    isDisqualified = true; // Safety filter: high energy dogs shouldn't be with people with no time
+                } else {
+                    timePoints = 40;
+                }
             }
+            score += timePoints * 0.20;
 
-            // Household (Q4)
-            const household = userProfile['4'];
-            const hasYoungKids = household === 'family_young';
-            if (hasYoungKids && pet.social_profile && pet.social_profile.kids === false) {
-                isDisqualified = true;
-            } else if (hasYoungKids && pet.social_profile && pet.social_profile.kids === true) {
-                score += 10;
-                reasons.push("Great with young children");
-            }
-
-            // Existing Pets (Q6)
-            const existingPets = userProfile['6'];
-            if (existingPets === 'dog' && pet.social_profile && pet.social_profile.dogs === false) {
-                isDisqualified = true;
-            } else if (existingPets === 'dog' && pet.social_profile && pet.social_profile.dogs === true) {
-                score += 10;
-                reasons.push("Friendly toward your other dogs");
-            }
-            if (existingPets === 'cat' && pet.social_profile && pet.social_profile.cats === false) {
-                isDisqualified = true;
-            }
-
-            // Environment (Q7)
-            const environment = userProfile['7']; // urban, suburban, semi_rural, rural
-            if (environment === 'urban' && (pet.energy_level === 'athletic' || pet.size === 'Large')) {
-                score -= 10; // Urban might be tough for very large/athletic dogs
-            } else if (environment === 'rural') {
-                score += 5; // Most dogs love rural
-            }
-
-            // --- Weighted Scoring ---
-
-            // Activity Level (Q2)
-            const userActivity = userProfile['2'];
-            const activityMap = { 'sedentary': 1, 'moderate': 2, 'active': 3, 'athletic': 4 };
-            const petEnergyMap = { 'sedentary': 1, 'low': 1, 'moderate': 2, 'active': 3, 'athletic': 4, 'high': 4 };
-            const userLevel = activityMap[userActivity] || 2;
-            const petLevel = petEnergyMap[pet.energy_level] || 2;
-            const diff = Math.abs(userLevel - petLevel);
-
-            if (diff === 0) {
-                score += 30;
-                reasons.push("Matches your energy level perfectly");
-            } else if (diff === 1) {
-                score += 15;
+            // --- 3. Living Space (20%) ---
+            const userSpace = userProfile['1']; // apartment, house_small, house_large, rural
+            let spacePoints = 0;
+            if (livingMatch && livingMatch[userSpace] === true) {
+                spacePoints = 100;
+                reasons.push(`Perfect for your ${userSpace.replace('_', ' ')}`);
+            } else if (livingMatch && livingMatch[userSpace] === false) {
+                spacePoints = 0;
+                // Don't strictly disqualify unless it's a huge dog in a tiny apartment with no exceptions
+                if (pet.size === 'Large' && userSpace === 'apartment') isDisqualified = true;
             } else {
-                score -= 15;
+                spacePoints = 50;
             }
+            score += spacePoints * 0.20;
 
-            // Experience Level (Q5)
-            const experience = userProfile['5'];
-            if (experience === 'first' && (pet.energy_level === 'athletic' || pet.energy_level === 'high')) {
-                score -= 20;
-            } else if (experience === 'expert') {
-                score += 10;
+            // --- 4. Experience (15%) ---
+            const userExp = userProfile['5']; // first, some, experienced, expert
+            const expRank = { first: 1, some: 2, experienced: 3, expert: 4 };
+            const uExp = expRank[userExp] || 1;
+            // High energy/Large dogs usually need level 3 (experienced)
+            const dNeeds = (pet.energy_level === 'athletic' || pet.size === 'Large') ? 3 : 1;
+
+            let expPoints = 0;
+            if (uExp >= dNeeds) expPoints = 100;
+            else expPoints = 40; // Needs guidance
+            score += expPoints * 0.15;
+
+            // --- 5. Other Pets (10%) ---
+            const userExistingPets = userProfile['6'];
+            const userPetDominance = userProfile['101']; // submissive, neutral, dominant
+            const userPetSocial = userProfile['102']; // very_friendly, selective, nervous
+
+            let petPoints = 100;
+            if (userExistingPets === 'dog' && social.dogs === false) {
+                petPoints = 0;
+                isDisqualified = true;
+            } else if (userExistingPets === 'cat' && social.cats === false) {
+                petPoints = 0;
+                isDisqualified = true;
+            } else if (userExistingPets !== 'none') {
+                // DEEP MATCHING
+                reasons.push("Compatible with your current pets");
+
+                // If user pet is dominant, we want a submissive dog
+                if (userPetDominance === 'dominant' && (temperament.includes('Protective') || temperament.includes('Stubborn'))) {
+                    petPoints -= 40; // Avoid friction
+                } else if (userPetDominance === 'submissive' && temperament.includes('Gentle')) {
+                    petPoints += 20; // Safe pair
+                }
+
+                // If user pet is nervous, shelter pet MUST be gentle/calm
+                if (userPetSocial === 'nervous' && (pet.energy_level === 'high' || pet.energy_level === 'athletic')) {
+                    petPoints -= 50;
+                } else if (userPetSocial === 'nervous' && temperament.includes('Gentle')) {
+                    petPoints += 30;
+                }
             }
+            score += Math.max(0, petPoints) * 0.10;
 
-            // Time Availability (Q3)
-            const timeAvailable = userProfile['3'];
-            if (timeAvailable === 'limited' && (pet.energy_level === 'active' || pet.energy_level === 'athletic')) {
-                isDisqualified = true; // Still disqualifying for safety
-            } else if (timeAvailable === 'full') {
-                score += 10;
-                reasons.push("Ideal for someone with a lot of time to bond");
+            // --- 6. Neighborhood (10%) ---
+            const userEnv = userProfile['7']; // urban, suburban, semi_rural, rural
+            let envPoints = 80; // Baseline
+            if (userEnv === 'urban' && (pet.energy_level === 'athletic' || pet.size === 'Large')) {
+                envPoints = 30;
+            } else if (userEnv === 'rural' || userEnv === 'semi_rural') {
+                envPoints = 100;
             }
+            score += envPoints * 0.10;
 
-            // Final Normalization
-            const matchScore = Math.max(0, Math.min(100, score + 40));
-
+            // Final Normalization and Response
             return {
                 ...pet,
-                matchScore,
-                matchReasons: reasons.slice(0, 3), // Limit to top 3 reasons
+                matchScore: Math.round(score),
+                matchReasons: reasons.slice(0, 3),
                 isDisqualified,
                 profile_image_url: pet.image_url
             };

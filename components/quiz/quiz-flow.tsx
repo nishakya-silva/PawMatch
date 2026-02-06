@@ -93,14 +93,57 @@ const quizQuestions = [
   },
 ]
 
+const extraPetQuestions = [
+  {
+    id: 101, // Custom ID to avoid overlap
+    category: "Current Pet Personality",
+    icon: Heart,
+    question: "How would you describe your current pet's dominance level?",
+    options: [
+      { value: "submissive", label: "Submissive", description: "Follows and yields easily" },
+      { value: "neutral", label: "Neutral", description: "Easy-going and adaptable" },
+      { value: "dominant", label: "Dominant", description: "Likes to be the leader" },
+    ],
+  },
+  {
+    id: 102,
+    category: "Current Pet Sociality",
+    icon: Users,
+    question: "How friendly is your current pet with new animals?",
+    options: [
+      { value: "very_friendly", label: "Very Friendly", description: "Loves making new friends" },
+      { value: "selective", label: "Selective", description: "Likes some, dislikes others" },
+      { value: "nervous", label: "Nervous/Fearful", description: "Needs slow introductions" },
+    ],
+  },
+]
+
 export function QuizFlow() {
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isComplete, setIsComplete] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const progress = ((currentStep + 1) / quizQuestions.length) * 100
-  const currentQuestion = quizQuestions[currentStep]
+  // Dynamically build the question list based on answers
+  const getActiveQuestions = () => {
+    let questions = [...quizQuestions]
+
+    // If they have existing pets (Question ID 6), add the extra questions
+    const hasExistingPet = answers[6] && answers[6] !== 'none'
+
+    if (hasExistingPet) {
+      // Insert extra questions after the "Existing Pets" question (which has ID 6)
+      // We'll just append them or interject them. Let's append before the last "Environment" question for better flow
+      const envIndex = questions.findIndex(q => q.id === 7)
+      questions.splice(envIndex, 0, ...extraPetQuestions)
+    }
+
+    return questions
+  }
+
+  const activeQuestions = getActiveQuestions()
+  const progress = ((currentStep + 1) / activeQuestions.length) * 100
+  const currentQuestion = activeQuestions[currentStep]
 
   const handleSelect = (value: string) => {
     setAnswers({ ...answers, [currentQuestion.id]: value })
@@ -109,7 +152,6 @@ export function QuizFlow() {
   const submitQuiz = async () => {
     setIsSubmitting(true)
     try {
-      // In a real env, use env var for API URL
       const response = await fetch('http://localhost:5000/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,16 +160,12 @@ export function QuizFlow() {
       const data = await response.json()
 
       if (data.success) {
-        // Save matches to localStorage for the results page to pick up
         localStorage.setItem('pawmatch_matches', JSON.stringify(data.matches))
         setIsComplete(true)
       } else {
-        console.error("Match failed", data)
-        // Fallback or error handling
         setIsComplete(true)
       }
     } catch (error) {
-      console.error("Submission error", error)
       setIsComplete(true)
     } finally {
       setIsSubmitting(false)
@@ -135,7 +173,7 @@ export function QuizFlow() {
   }
 
   const handleNext = () => {
-    if (currentStep < quizQuestions.length - 1) {
+    if (currentStep < activeQuestions.length - 1) {
       setCurrentStep(currentStep + 1)
     } else {
       submitQuiz()

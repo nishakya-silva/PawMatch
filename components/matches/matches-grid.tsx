@@ -31,6 +31,7 @@ export function MatchesGrid() {
               location: "PawMatch Shelter",
               compatibility: m.matchScore || 0,
               reasons: m.matchReasons || [],
+              is_foster: m.is_foster || false,
               traits: typeof m.temperament === 'string' ? JSON.parse(m.temperament) : (m.temperament || []),
               image: m.profile_image_url || m.image_url || "/placeholder.svg?height=400&width=400"
             }))
@@ -53,6 +54,7 @@ export function MatchesGrid() {
             location: "PawMatch Shelter",
             compatibility: 0, // No quiz done
             reasons: [],
+            is_foster: m.is_foster || false,
             traits: typeof m.temperament === 'string' ? JSON.parse(m.temperament) : (m.temperament || []),
             image: m.profile_image_url || m.image_url || "/placeholder.svg?height=400&width=400"
           }))
@@ -154,7 +156,7 @@ export function MatchesGrid() {
                   />
 
                   {/* Compatibility badge */}
-                  <div className="absolute top-4 left-4">
+                  <div className="absolute top-4 left-4 flex flex-col gap-2">
                     <Badge
                       className={cn(
                         "text-sm font-semibold",
@@ -163,10 +165,16 @@ export function MatchesGrid() {
                           : pet.compatibility >= 80
                             ? "bg-primary text-primary-foreground"
                             : "bg-secondary text-secondary-foreground",
+                        pet.compatibility === 0 && "hidden"
                       )}
                     >
                       {pet.compatibility}% Match
                     </Badge>
+                    {pet.is_foster && (
+                      <Badge className="bg-orange-500 text-white border-none">
+                        Foster to Adopt
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Favorite button */}
@@ -212,7 +220,9 @@ export function MatchesGrid() {
                   </div>
 
                   <Button className="w-full" asChild>
-                    <Link href={`/pet/${pet.id}`}>View Profile</Link>
+                    <Link href={`/pet/${pet.id}`}>
+                      {pet.is_foster ? "Learn More & Foster" : "View Profile"}
+                    </Link>
                   </Button>
 
                   {pet.reasons && pet.reasons.length > 0 && (

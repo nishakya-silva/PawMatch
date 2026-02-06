@@ -94,7 +94,9 @@ export function PetProfile({ id }: PetProfileProps) {
 
       const data = await res.json()
       if (data.success) {
-        toast.success(`Adoption successful! ${pet.name} is now officially part of your family.`)
+        toast.success(pet.is_foster
+          ? `Foster trial started! ${pet.name} is ready for their 14-day stay.`
+          : `Adoption successful! ${pet.name} is now officially part of your family.`)
         setIsConfirmModalOpen(false)
         router.push("/profile")
       } else {
@@ -355,7 +357,11 @@ export function PetProfile({ id }: PetProfileProps) {
                 onClick={() => setIsConfirmModalOpen(true)}
                 disabled={isAdopting || displayData.status === 'adopted'}
               >
-                {displayData.status === 'adopted' ? 'Already Adopted' : 'Start Adoption Process'}
+                {displayData.status === 'adopted'
+                  ? 'Already Adopted'
+                  : displayData.is_foster
+                    ? 'Start Fostering'
+                    : 'Start Adoption Process'}
               </Button>
               <Button
                 size="lg"
@@ -371,15 +377,17 @@ export function PetProfile({ id }: PetProfileProps) {
             <Dialog open={isConfirmModalOpen} onOpenChange={setIsConfirmModalOpen}>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Confirm Adoption</DialogTitle>
+                  <DialogTitle>{displayData.is_foster ? 'Confirm Fostering' : 'Confirm Adoption'}</DialogTitle>
                   <DialogDescription>
-                    Are you sure you want to start the adoption process for {displayData.name}? This will mark them as adopted and begin your journey together.
+                    {displayData.is_foster
+                      ? `Are you sure you want to start a 14-day foster trial for ${displayData.name}? We will support you every step of the way.`
+                      : `Are you sure you want to start the adoption process for ${displayData.name}? This will mark them as adopted and begin your journey together.`}
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className="gap-2 sm:gap-0">
                   <Button variant="outline" onClick={() => setIsConfirmModalOpen(false)}>Cancel</Button>
                   <Button onClick={handleStartAdoption} disabled={isAdopting}>
-                    {isAdopting ? "Processing..." : "Confirm Adoption"}
+                    {isAdopting ? "Processing..." : (displayData.is_foster ? "Confirm Foster" : "Confirm Adoption")}
                   </Button>
                 </DialogFooter>
               </DialogContent>

@@ -27,12 +27,12 @@ router.get('/logs', auth, authController.getActivityLogs);
 router.post('/match', matchController.getMatches);
 
 // Adoption Routes
-router.post('/adopt', adoptionController.applyForAdoption);
+router.post('/adopt', auth, adoptionController.applyForAdoption);
 router.get('/adoptions/me', auth, adoptionController.getUserAdoptions);
 
 // Welfare Routes
-router.get('/welfare/:adoptionId', welfareController.getDashboard);
-router.post('/welfare/:adoptionId/log', welfareController.postLog);
+router.get('/welfare/:adoptionId', auth, welfareController.getDashboard);
+router.post('/welfare/:adoptionId/log', auth, welfareController.postLog);
 
 // Verification Route
 router.post('/verify', verifyController.verifyIdentity);
@@ -50,6 +50,11 @@ router.post('/pets', petController.uploadMiddleware, petController.addPet);
 router.get('/pets', petController.getAllPets);
 router.get('/pets/:id', petController.getPetById);
 
+// Demo Routes
+const demoController = require('../controllers/demoController');
+router.post('/demo/request', demoController.requestDemo);
+router.get('/demo/requests', demoController.getDemoRequests); // For admin dashboard
+
 // Visit Routes
 const visitController = require('../controllers/visitController');
 router.post('/visits', auth, visitController.scheduleVisit);
@@ -61,6 +66,14 @@ router.delete('/visits/:id', auth, visitController.cancelVisit);
 const shelterController = require('../controllers/shelterController');
 router.get('/shelter/:shelterId/visits', shelterController.getVisitRequests);
 router.put('/shelter/visits/:visitId', shelterController.updateVisitStatus);
+router.post('/shelter/message', auth, shelterController.sendMessage);
+router.get('/shelter/messages', auth, shelterController.getShelterMessages); // This would be for the shelter dashboard
+
+// Report Routes
+const reportController = require('../controllers/reportController');
+router.post('/reports', reportController.submitReport);
+router.get('/reports', reportController.getRecentReports);
+router.delete('/reports/:id', reportController.deleteReport);
 
 // Admin / Shelter Verification Routes
 const adminController = require('../controllers/adminController');

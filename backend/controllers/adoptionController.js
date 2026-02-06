@@ -3,7 +3,8 @@ const { logActivity } = require('../utils/logger');
 
 exports.applyForAdoption = async (req, res) => {
     try {
-        const { petId, userId, answers } = req.body;
+        const { petId, answers } = req.body;
+        const userId = req.user.id; // Corrected to use authenticated user
 
         if (!userId) {
             return res.status(400).json({ error: "User ID is required. Please log in." });

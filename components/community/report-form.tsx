@@ -1,13 +1,14 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { MapPin, Camera, AlertTriangle } from "lucide-react"
+import { MapPin, Camera, AlertTriangle, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 export function CommunityReportForm() {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLocating, setIsLocating] = useState(false)
   const [formData, setFormData] = useState({
     animalType: "",
     condition: "",
@@ -18,9 +19,97 @@ export function CommunityReportForm() {
     images: [] as File[],
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Report submitted:", formData)
+
+    if (!formData.animalType || !formData.condition || !formData.location) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch('http://localhost:5000/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success("Report submitted successfully! Thank you for helping.")
+
+        // Save to my reports
+        const myReports = JSON.parse(localStorage.getItem('pawmatch_my_reports') || '[]')
+        myReports.push(data.reportId)
+        localStorage.setItem('pawmatch_my_reports', JSON.stringify(myReports))
+
+        setFormData({
+          animalType: "",
+          condition: "",
+          location: "",
+          description: "",
+          contactName: "",
+          contactPhone: "",
+          images: [],
+        })
+      } else {
+        toast.error(data.error || "Failed to submit report")
+      }
+    } catch (error) {
+      console.error("Submission error:", error)
+      toast.error("An error occurred. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleGetLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser")
+      return
+    }
+
+    setIsLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords
+        try {
+          // Reverse geocoding with Nominatim (Free/Public)
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
+          const data = await res.json()
+          if (data.display_name) {
+            setFormData(prev => ({ ...prev, location: data.display_name }))
+            toast.success("Location detected!")
+          } else {
+            setFormData(prev => ({ ...prev, location: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` }))
+          }
+        } catch (err) {
+          setFormData(prev => ({ ...prev, location: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` }))
+        } finally {
+          setIsLocating(false)
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error)
+        setIsLocating(false)
+
+        switch (error.code) {
+          case 1:
+            toast.error("Location permission denied. Please allow access in your browser.")
+            break
+          case 2:
+            toast.error("Position unavailable. Try moving to a better spot.")
+            break
+          case 3:
+            toast.error("Location request timed out. Try again.")
+            break
+          default:
+            toast.error("Error detecting location.")
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
   }
 
   return (
@@ -40,9 +129,8 @@ export function CommunityReportForm() {
                 key={type}
                 type="button"
                 onClick={() => setFormData({ ...formData, animalType: type })}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  formData.animalType === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                }`}
+                className={`p-4 rounded-lg border-2 transition-all ${formData.animalType === type ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                  }`}
               >
                 {type}
               </button>
@@ -64,11 +152,10 @@ export function CommunityReportForm() {
                 key={condition.value}
                 type="button"
                 onClick={() => setFormData({ ...formData, condition: condition.value })}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
-                  formData.condition === condition.value
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
-                }`}
+                className={`p-4 rounded-lg border-2 text-left transition-all ${formData.condition === condition.value
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full bg-${condition.color}-500`} />
@@ -90,8 +177,18 @@ export function CommunityReportForm() {
               onChange={(e) => setFormData({ ...formData, location: e.target.value })}
               className="flex-1 px-4 py-3 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
             />
-            <Button type="button" variant="outline" size="lg">
-              <MapPin className="w-5 h-5" />
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleGetLocation}
+              disabled={isLocating}
+            >
+              {isLocating ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <MapPin className="w-5 h-5 text-primary" />
+              )}
             </Button>
           </div>
           <p className="text-sm text-muted-foreground mt-2">Or use current location</p>
@@ -146,8 +243,15 @@ export function CommunityReportForm() {
           </div>
         </div>
 
-        <Button type="submit" size="lg" className="w-full">
-          Submit Report
+        <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            "Submit Report"
+          )}
         </Button>
 
         <p className="text-xs text-muted-foreground text-center">
