@@ -389,7 +389,7 @@ exports.resetPassword = async (req, res) => {
 // Get current user details
 exports.getMe = async (req, res) => {
     try {
-        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, verification_status FROM users WHERE id = ?', [req.user.id]);
+        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, shelter_code, shelter_slug, shelter_description, shelter_address, shelter_logo_url, shelter_banner_url, shelter_tagline, shelter_website, shelter_social_links, verification_status FROM users WHERE id = ?', [req.user.id]);
         if (user.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }

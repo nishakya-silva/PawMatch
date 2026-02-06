@@ -6,9 +6,11 @@ const verifyController = require('../controllers/verifyController');
 const adoptionController = require('../controllers/adoptionController');
 const authController = require('../controllers/authController');
 const alertService = require('../services/alertService');
+const analyticsController = require('../controllers/analyticsController');
 const achievementController = require('../controllers/achievementController');
 
 const auth = require('../middleware/auth');
+const admin = require('../middleware/admin');
 
 // Auth Routes
 router.post('/register', authController.register);
@@ -36,6 +38,7 @@ router.post('/shelter/approve-adoption', auth, adoptionController.approveAdoptio
 
 // Welfare Routes
 router.get('/welfare/shelter/alerts', auth, welfareController.getShelterAlerts);
+router.post('/welfare/respond', auth, welfareController.respondToAlert);
 router.get('/welfare/:adoptionId', auth, welfareController.getDashboard);
 router.post('/welfare/:adoptionId/log', auth, welfareController.postLog);
 
@@ -77,6 +80,7 @@ router.get('/shelter/messages', auth, shelterController.getShelterMessages);
 router.post('/shelter/message/respond', auth, shelterController.respondToMessage);
 router.get('/shelter/potential-matches', auth, shelterController.getPotentialMatches);
 router.get('/user/messages', auth, shelterController.getUserMessages);
+router.get('/shelter/public/:id', shelterController.getShelterPublicProfile);
 
 // Report Routes
 const reportController = require('../controllers/reportController');
@@ -87,8 +91,14 @@ router.delete('/reports/:id', reportController.deleteReport);
 // Admin / Shelter Verification Routes
 const adminController = require('../controllers/adminController');
 router.post('/shelters/verify-request', adminController.uploadVerificationDoc, adminController.submitVerification);
-router.get('/admin/pending-shelters', adminController.getPendingShelters);
-router.post('/admin/verify-shelter', adminController.verifyShelter);
-router.get('/admin/stats', adminController.getStats);
+router.get('/admin/pending-shelters', [auth, admin], adminController.getPendingShelters);
+router.post('/admin/verify-shelter', [auth, admin], adminController.verifyShelter);
+router.get('/admin/stats', [auth, admin], adminController.getStats);
+router.get('/admin/all-shelters', [auth, admin], adminController.getAllShelters);
+router.get('/admin/alerts', [auth, admin], adminController.getAlerts);
+router.post('/admin/handle-report', [auth, admin], adminController.handleAnimalReport);
+router.post('/admin/handle-welfare', [auth, admin], adminController.handleWelfareAlert);
+router.get('/admin/all-adoptions', [auth, admin], adminController.getAdoptions);
+router.get('/admin/analytics/shelter/:id', [auth, admin], analyticsController.getShelterAnalytics);
 
 module.exports = router;

@@ -7,15 +7,25 @@ const isSMTPConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && proce
 let transporter = null;
 
 if (isSMTPConfigured) {
-    transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT || 587,
-        secure: false, // true for 465, false for other ports
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-        },
-    });
+    const transportConfig = process.env.SMTP_HOST === 'smtp.gmail.com'
+        ? {
+            service: 'gmail',
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        }
+        : {
+            host: process.env.SMTP_HOST,
+            port: process.env.SMTP_PORT || 587,
+            secure: false,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+        };
+
+    transporter = nodemailer.createTransport(transportConfig);
 } else {
     console.warn("⚠️ SMTP Config missing. Emails will NOT be sent (OTPs logged to console).");
 }
@@ -102,6 +112,44 @@ exports.sendPasswordReset = async (email, resetAppUrl) => {
             console.error("   3. Generate an 'App Password'.");
             console.error("   4. Use that 16-character code as your SMTP_PASS in .env.");
         }
+        return false;
+    }
+};
+
+exports.sendRescueAlert = async (shelterEmail, reportDetails) => {
+    console.log(`\n==================================================`);
+    console.log(`🚑 RESCUE ALERT for ${shelterEmail}`);
+    console.log(`Animal: ${reportDetails.animal_type}`);
+    console.log(`Location: ${reportDetails.location}`);
+    console.log(`==================================================\n`);
+
+    if (!isSMTPConfigured) {
+        return true;
+    }
+
+    try {
+        await transporter.sendMail({
+            from: `"${process.env.SMTP_FROM_NAME || 'PawMatch Admin'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+            to: shelterEmail,
+            subject: `🚨 EMERGENCY: ${reportDetails.animal_type} Rescue Required`,
+            html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; border: 2px solid #ef4444; border-radius: 10px;">
+                    <h2 style="color: #ef4444;">Emergency Rescue Request</h2>
+                    <p>An animal in distress has been reported near your area.</p>
+                    <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p><strong>Animal Type:</strong> ${reportDetails.animal_type}</p>
+                        <p><strong>Condition:</strong> ${reportDetails.condition_type}</p>
+                        <p><strong>Location:</strong> ${reportDetails.location}</p>
+                        <p><strong>Description:</strong> ${reportDetails.description || 'No description provided'}</p>
+                    </div>
+                    <p><strong>Reporter:</strong> ${reportDetails.contact_name} (${reportDetails.contact_phone})</p>
+                    <p style="font-size: 12px; color: #666; margin-top: 20px;">Please take action immediately if you can assist.</p>
+                </div>
+            `,
+        });
+        return true;
+    } catch (error) {
+        console.error("❌ Rescue alert mail failed:", error);
         return false;
     }
 };

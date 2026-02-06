@@ -188,3 +188,34 @@ exports.getShelterAlerts = async (req, res) => {
         res.status(500).json({ error: "Server Error" });
     }
 };
+
+exports.respondToAlert = async (req, res) => {
+    try {
+        const { logId, responseText } = req.body;
+        const shelterId = req.user.id;
+
+        // Verify that this alert belongs to a pet from this shelter
+        const checkRes = await db.query(`
+            SELECT l.id 
+            FROM welfare_logs l
+            JOIN adoptions a ON l.adoption_id = a.id
+            JOIN pets p ON a.pet_id = p.id
+            WHERE l.id = ? AND p.shelter_id = ?
+        `, [logId, shelterId]);
+
+        if ((checkRes.rows || checkRes).length === 0) {
+            return res.status(403).json({ error: "Unauthorized or alert not found" });
+        }
+
+        await db.query(
+            "UPDATE welfare_logs SET status = 'responded', response_text = ? WHERE id = ?",
+            [responseText, logId]
+        );
+
+        res.json({ success: true, message: "Response submitted successfully" });
+
+    } catch (error) {
+        console.error("Respond to Alert Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
