@@ -6,25 +6,25 @@ const steps = [
     title: "Take the Pawsonality Quiz",
     description:
       "Answer questions about your lifestyle, living situation, activity level, and what you're looking for in a pet.",
-    image: "/person-taking-quiz-on-laptop-with-dog-nearby.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356673/pawmatch/static/dht7gdu7u0n0dektyby8.jpg",
   },
   {
     number: "02",
     title: "Get Your Matches",
     description: "Our algorithm analyzes your profile against available pets and ranks them by compatibility score.",
-    image: "/mobile-app-showing-pet-matches-with-compatibility-.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356672/pawmatch/static/ojmrxvsu7lkphwmpodyn.jpg",
   },
   {
     number: "03",
     title: "Meet & Verify",
     description: "Visit the shelter, meet your matches, and complete our quick identity verification process.",
-    image: "/family-meeting-dog-at-shelter--happy-moment.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356663/pawmatch/static/kjtyqjsnsoolxcvmjiep.jpg",
   },
   {
     number: "04",
     title: "Supported Transition",
     description: "Use our welfare tracker during the first 14 days to ensure a smooth adjustment for everyone.",
-    image: "/happy-dog-settling-into-new-home--cozy-environment.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356667/pawmatch/static/cskdghxrjqubehgdhseh.jpg",
   },
 ]
 

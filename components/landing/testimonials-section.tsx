@@ -4,7 +4,7 @@ const testimonials = [
   {
     name: "Kavindi Perera",
     location: "Colombo",
-    image: "/sri-lankan-woman-smiling-portrait.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356679/pawmatch/static/jwytpzevxsaezqhiweaq.jpg",
     pet: "Adopted Bruno, a 2-year-old mix",
     quote:
       "The quiz matched us perfectly. Bruno's energy level matches our active lifestyle, and the welfare tracker helped us through the first two weeks smoothly.",
@@ -12,7 +12,7 @@ const testimonials = [
   {
     name: "Roshan de Silva",
     location: "Kandy",
-    image: "/sri-lankan-man-smiling-portrait.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356678/pawmatch/static/cmxuxwu8byhwsjszig9x.jpg",
     pet: "Adopted Bella, a 4-year-old rescue",
     quote:
       "I was worried about how Bella would get along with my cat. The buddy-check feature gave us confidence, and they're now best friends!",
@@ -20,7 +20,7 @@ const testimonials = [
   {
     name: "Nimali Fernando",
     location: "Galle",
-    image: "/sri-lankan-woman-with-glasses-portrait.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356680/pawmatch/static/r0rrwqmkdmsxuvgbtg5g.jpg",
     pet: "Foster-to-adopt success",
     quote:
       "As a first-time pet owner, the foster option was perfect. The platform supported me every step of the way until I was ready to commit.",

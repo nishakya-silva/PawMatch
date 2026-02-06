@@ -65,7 +65,7 @@ export function HeroSection() {
           <div className="relative">
             <div className="relative z-10 rounded-3xl overflow-hidden shadow-2xl">
               <img
-                src="/happy-golden-retriever-dog-with-family--warm-light.jpg"
+                src="https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356669/pawmatch/static/d0e8rgpfa8umymv9jl2n.jpg"
                 alt="Happy adopted dog with loving family"
                 className="w-full h-auto object-cover"
               />
@@ -75,7 +75,7 @@ export function HeroSection() {
             <div className="absolute -left-4 top-20 bg-card p-4 rounded-2xl shadow-lg border border-border animate-in slide-in-from-left duration-700">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full overflow-hidden">
-                  <img src="/cute-beagle-dog-face.jpg" alt="Matched pet" className="w-full h-full object-cover" />
+                  <img src="https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356661/pawmatch/static/i8x0yr1fhvdnsp0ssk4b.jpg" alt="Matched pet" className="w-full h-full object-cover" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm">Max</p>

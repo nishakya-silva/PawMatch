@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/providers/auth-provider"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Heart, Dog, User as UserIcon, LogOut } from "lucide-react"
+import { Menu, X, Heart, Dog, User as UserIcon, LogOut, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -37,21 +37,25 @@ export function Navigation() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/quiz" className="text-muted-foreground hover:text-foreground transition-colors">
-              Take Quiz
-            </Link>
-            <Link href="/matches" className="text-muted-foreground hover:text-foreground transition-colors">
-              Browse Matches
-            </Link>
-            <Link href="/foster-to-adopt" className="text-muted-foreground hover:text-foreground transition-colors">
-              Foster to Adopt
-            </Link>
-            <Link href="/community-report" className="text-muted-foreground hover:text-foreground transition-colors">
-              Report Animal
-            </Link>
-            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-              Welfare Tracker
-            </Link>
+            {!isLoading && user?.role !== 'shelter' && user?.role !== 'admin' && (
+              <>
+                <Link href="/quiz" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Take Quiz
+                </Link>
+                <Link href="/matches" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Browse Matches
+                </Link>
+                <Link href="/foster-to-adopt" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Foster to Adopt
+                </Link>
+                <Link href="/community-report" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Report Animal
+                </Link>
+                <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Welfare Tracker
+                </Link>
+              </>
+            )}
             {!isLoading && !user && (
               <Link href="/shelters" className="text-muted-foreground hover:text-foreground transition-colors">
                 For Shelters
@@ -81,17 +85,27 @@ export function Navigation() {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/profile" className="cursor-pointer">
+                      <Link href={user.role === 'shelter' ? "/shelters/dashboard" : user.role === 'admin' ? "/admin/dashboard" : "/profile"} className="cursor-pointer">
                         <UserIcon className="w-4 h-4 mr-2" />
-                        My Profile
+                        {user.role === 'adopter' ? 'My Profile' : 'Dashboard'}
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/dashboard" className="cursor-pointer">
-                        <Heart className="w-4 h-4 mr-2" />
-                        My Matches
-                      </Link>
-                    </DropdownMenuItem>
+                    {user?.role === 'adopter' && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard" className="cursor-pointer">
+                          <Heart className="w-4 h-4 mr-2" />
+                          My Matches
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {user?.role === 'adopter' && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/messages" className="cursor-pointer">
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          My Messages
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
                       <LogOut className="w-4 h-4 mr-2" />
@@ -99,13 +113,14 @@ export function Navigation() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button asChild>
-                  <Link href="/quiz">
-                    <Heart className="w-4 h-4 mr-2" />
-                    Find Your Match
-                  </Link>
-
-                </Button>
+                {!isLoading && user?.role !== 'shelter' && user?.role !== 'admin' && (
+                  <Button asChild>
+                    <Link href="/quiz">
+                      <Heart className="w-4 h-4 mr-2" />
+                      Find Your Match
+                    </Link>
+                  </Button>
+                )}
               </>
             ) : (
               <>
@@ -129,21 +144,25 @@ export function Navigation() {
       {/* Mobile menu */}
       <div className={cn("md:hidden overflow-hidden transition-all duration-300", isOpen ? "max-h-96" : "max-h-0")}>
         <div className="px-4 py-4 space-y-4 bg-background border-t border-border">
-          <Link href="/quiz" className="block py-2 text-muted-foreground hover:text-foreground">
-            Take Quiz
-          </Link>
-          <Link href="/matches" className="block py-2 text-muted-foreground hover:text-foreground">
-            Browse Matches
-          </Link>
-          <Link href="/foster-to-adopt" className="block py-2 text-muted-foreground hover:text-foreground">
-            Foster to Adopt
-          </Link>
-          <Link href="/community-report" className="block py-2 text-muted-foreground hover:text-foreground">
-            Report Animal
-          </Link>
-          <Link href="/dashboard" className="block py-2 text-muted-foreground hover:text-foreground">
-            Welfare Tracker
-          </Link>
+          {!isLoading && user?.role !== 'shelter' && user?.role !== 'admin' && (
+            <>
+              <Link href="/quiz" className="block py-2 text-muted-foreground hover:text-foreground">
+                Take Quiz
+              </Link>
+              <Link href="/matches" className="block py-2 text-muted-foreground hover:text-foreground">
+                Browse Matches
+              </Link>
+              <Link href="/foster-to-adopt" className="block py-2 text-muted-foreground hover:text-foreground">
+                Foster to Adopt
+              </Link>
+              <Link href="/community-report" className="block py-2 text-muted-foreground hover:text-foreground">
+                Report Animal
+              </Link>
+              <Link href="/dashboard" className="block py-2 text-muted-foreground hover:text-foreground">
+                Welfare Tracker
+              </Link>
+            </>
+          )}
           {!isLoading && !user && (
             <Link href="/shelters" className="block py-2 text-muted-foreground hover:text-foreground">
               For Shelters
@@ -168,9 +187,9 @@ export function Navigation() {
                   </div>
                 </div>
                 <Button variant="outline" asChild>
-                  <Link href="/profile">
+                  <Link href={user.role === 'shelter' ? "/shelters/dashboard" : user.role === 'admin' ? "/admin/dashboard" : "/profile"}>
                     <UserIcon className="w-4 h-4 mr-2" />
-                    My Profile
+                    {user.role === 'adopter' ? 'My Profile' : 'Dashboard'}
                   </Link>
                 </Button>
                 <Button variant="outline" onClick={handleLogout} className="text-destructive hover:text-destructive">
@@ -190,7 +209,7 @@ export function Navigation() {
             )}
 
 
-            {user?.role !== 'shelter' && user?.role !== 'admin' && (
+            {!isLoading && user?.role !== 'shelter' && user?.role !== 'admin' && (
               <Button asChild>
                 <Link href="/quiz">Find Your Match</Link>
               </Button>

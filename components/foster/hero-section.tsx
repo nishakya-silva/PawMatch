@@ -58,7 +58,7 @@ export function FosterHeroSection() {
           {/* Image */}
           <div className="relative">
             <div className="aspect-square rounded-2xl overflow-hidden shadow-2xl">
-              <img src="/happy-family-fostering-a-dog-at-home.jpg" alt="Foster to adopt" className="w-full h-full object-cover" />
+              <img src="https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356668/pawmatch/static/zhnltumpyqssrmq3ofka.jpg" alt="Foster to adopt" className="w-full h-full object-cover" />
             </div>
             {/* Floating card */}
             <div className="absolute -bottom-6 -left-6 bg-card p-6 rounded-xl shadow-xl border border-border max-w-xs">

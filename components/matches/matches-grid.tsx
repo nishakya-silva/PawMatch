@@ -12,54 +12,95 @@ export function MatchesGrid() {
   const [showFilters, setShowFilters] = useState(false)
   const [matches, setMatches] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [hasQuizResults, setHasQuizResults] = useState(false)
 
   useEffect(() => {
     const fetchMatches = async () => {
       try {
-        // 1. Check if we have quiz results in localStorage
+        // Always fetch all available pets from the database
+        const res = await fetch('http://localhost:5000/api/pets?status=available')
+        const data = await res.json()
+
+        if (!data.success) {
+          throw new Error('Failed to fetch pets')
+        }
+
+        // Check for quiz results and their expiration
+        let quizScores: Map<number, { score: number, reasons: string[] }> = new Map()
+        let hasValidQuiz = false
+
         const storedMatches = localStorage.getItem('pawmatch_matches')
-        if (storedMatches) {
-          const parsedMatches = JSON.parse(storedMatches)
-          if (parsedMatches && parsedMatches.length > 0) {
-            // Map the stored matches to the UI format
-            const mappedMatches = parsedMatches.map((m: any) => ({
-              id: m.id,
-              name: m.name,
-              breed: m.breed,
-              age: m.age,
-              gender: m.gender,
-              location: "PawMatch Shelter",
-              compatibility: m.matchScore || 0,
-              reasons: m.matchReasons || [],
-              is_foster: m.is_foster || false,
-              traits: typeof m.temperament === 'string' ? JSON.parse(m.temperament) : (m.temperament || []),
-              image: m.profile_image_url || m.image_url || "/placeholder.svg?height=400&width=400"
-            }))
-            setMatches(mappedMatches)
-            setIsLoading(false)
-            return // Skip fetching general list
+        const quizTimestamp = localStorage.getItem('pawmatch_quiz_timestamp')
+
+        if (storedMatches && quizTimestamp) {
+          const timestamp = parseInt(quizTimestamp)
+          const oneHourInMs = 60 * 60 * 1000 // 1 hour
+          const now = Date.now()
+
+          // Check if quiz results are still valid (less than 1 hour old)
+          if (now - timestamp < oneHourInMs) {
+            try {
+              const parsedMatches = JSON.parse(storedMatches)
+              if (parsedMatches && Array.isArray(parsedMatches)) {
+                // Create a map of pet ID to quiz scores
+                parsedMatches.forEach((m: any) => {
+                  quizScores.set(m.id, {
+                    score: m.matchScore || 0,
+                    reasons: m.matchReasons || []
+                  })
+                })
+                hasValidQuiz = true
+              }
+            } catch (e) {
+              console.error('Error parsing quiz results:', e)
+            }
+          } else {
+            // Quiz results expired, clear them
+            localStorage.removeItem('pawmatch_matches')
+            localStorage.removeItem('pawmatch_quiz_timestamp')
           }
         }
 
-        // 2. Fallback: Fetch all available pets if no quiz results
-        const res = await fetch('http://localhost:5000/api/pets?status=available')
-        const data = await res.json()
-        if (data.success) {
-          const apiMatches = data.pets.map((m: any) => ({
+        // Map all pets and merge with quiz scores if available
+        const allMatches = data.pets.map((m: any) => {
+          // Parse temperament properly
+          let parsedTemperament = m.temperament
+          if (typeof m.temperament === 'string') {
+            try {
+              parsedTemperament = JSON.parse(m.temperament)
+            } catch (e) {
+              parsedTemperament = []
+            }
+          }
+
+          // Extract traits array
+          let traits = []
+          if (Array.isArray(parsedTemperament)) {
+            traits = parsedTemperament
+          } else if (parsedTemperament && parsedTemperament.tags && Array.isArray(parsedTemperament.tags)) {
+            traits = parsedTemperament.tags
+          }
+
+          // Get quiz score for this pet if available
+          const quizData = quizScores.get(m.id)
+
+          return {
             id: m.id,
             name: m.name,
             breed: m.breed,
             age: m.age,
             gender: m.gender,
-            location: "PawMatch Shelter",
-            compatibility: 0, // No quiz done
-            reasons: [],
+            shelter_name: m.shelter_name || "PawMatch Shelter",
+            compatibility: quizData ? quizData.score : 0,
+            reasons: quizData ? quizData.reasons : [],
             is_foster: m.is_foster || false,
-            traits: typeof m.temperament === 'string' ? JSON.parse(m.temperament) : (m.temperament || []),
+            traits: traits,
             image: m.profile_image_url || m.image_url || "/placeholder.svg?height=400&width=400"
-          }))
-          setMatches(apiMatches)
-        }
+          }
+        })
+
+        setMatches(allMatches)
+        setHasQuizResults(hasValidQuiz)
       } catch (e) {
         console.error("Failed to fetch matches", e)
       } finally {
@@ -79,9 +120,13 @@ export function MatchesGrid() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Your Matches</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Your Matches
+            </h1>
             <p className="text-muted-foreground">
-              Based on your Pawsonality Quiz results, here are your compatible matches
+              {hasQuizResults
+                ? "Personalized matches based on your Pawsonality Quiz results"
+                : "All available pets. Take the quiz to see your compatibility scores!"}
             </p>
           </div>
           <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
@@ -160,12 +205,13 @@ export function MatchesGrid() {
                     <Badge
                       className={cn(
                         "text-sm font-semibold",
-                        pet.compatibility >= 90
-                          ? "bg-accent text-accent-foreground"
-                          : pet.compatibility >= 80
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-secondary-foreground",
-                        pet.compatibility === 0 && "hidden"
+                        pet.compatibility === 0
+                          ? "bg-muted text-muted-foreground"
+                          : pet.compatibility >= 90
+                            ? "bg-accent text-accent-foreground"
+                            : pet.compatibility >= 80
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-secondary text-secondary-foreground"
                       )}
                     >
                       {pet.compatibility}% Match
@@ -207,7 +253,7 @@ export function MatchesGrid() {
                     </span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-4 h-4" />
-                      {pet.location}
+                      {pet.shelter_name}
                     </span>
                   </div>
 
@@ -225,7 +271,7 @@ export function MatchesGrid() {
                     </Link>
                   </Button>
 
-                  {pet.reasons && pet.reasons.length > 0 && (
+                  {hasQuizResults && pet.reasons && pet.reasons.length > 0 && (
                     <p className="mt-3 text-xs text-accent font-medium flex items-center gap-1">
                       <Zap className="w-3 h-3" />
                       {pet.reasons[0]}

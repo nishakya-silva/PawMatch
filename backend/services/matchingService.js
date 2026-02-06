@@ -19,7 +19,8 @@ class MatchingService {
 
             const social = parseJson(pet.social_profile);
             const livingMatch = parseJson(pet.living_situation_match);
-            const temperament = parseJson(pet.temperament);
+            const parsedTemp = parseJson(pet.temperament);
+            const temperament = Array.isArray(parsedTemp) ? parsedTemp : (parsedTemp.tags || []);
 
             let score = 0;
             let reasons = [];

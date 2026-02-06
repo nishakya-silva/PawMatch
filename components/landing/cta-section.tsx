@@ -30,7 +30,7 @@ export function CTASection() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="text-base bg-transparent" asChild>
-              <Link href="/matches">Browse All Pets</Link>
+              <Link href="/matches?browse=all">Browse All Pets</Link>
             </Button>
           </div>
         </div>

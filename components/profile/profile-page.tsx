@@ -44,7 +44,7 @@ interface Adoption {
     petImage: string
     adoptionDate: string
     currentDay: number
-    status: "active" | "completed"
+    status: "active" | "completed" | "pending"
 }
 
 interface Visit {
@@ -71,6 +71,15 @@ interface ActivityLog {
     action_type: string
     details: any
     created_at: string
+}
+
+interface Achievement {
+    type: string
+    title: string
+    description: string
+    icon: string
+    color: string
+    achievedAt: string
 }
 
 export function ProfilePage() {
@@ -103,6 +112,8 @@ export function ProfilePage() {
         time: "",
         notes: ""
     })
+    const [achievements, setAchievements] = useState<Achievement[]>([])
+    const [isLoadingAchievements, setIsLoadingAchievements] = useState(false)
 
     useEffect(() => {
         if (!isLoading && !user) {
@@ -187,6 +198,24 @@ export function ProfilePage() {
         }
     }
 
+    const fetchAchievements = async () => {
+        if (!token) return
+        setIsLoadingAchievements(true)
+        try {
+            const res = await fetch("http://localhost:5000/api/achievements", {
+                headers: { "x-auth-token": token }
+            })
+            const data = await res.json()
+            if (data.success) {
+                setAchievements(data.achievements)
+            }
+        } catch (error) {
+            console.error("Failed to fetch achievements:", error)
+        } finally {
+            setIsLoadingAchievements(false)
+        }
+    }
+
     const fetchUserData = async () => {
         if (!token) return
         try {
@@ -203,7 +232,7 @@ export function ProfilePage() {
                     petImage: a.petImage || "/placeholder.svg",
                     adoptionDate: a.created_at,
                     currentDay: Math.floor((new Date().getTime() - new Date(a.created_at).getTime()) / (1000 * 3600 * 24)) + 1,
-                    status: "active",
+                    status: a.status,
                 }))
                 setAdoptions(mappedAdoptions)
 
@@ -215,9 +244,10 @@ export function ProfilePage() {
                 }))
             }
 
-            // Fetch real logs and visits
+            // Fetch real logs and visits and achievements
             fetchActivityLogs()
             fetchVisits()
+            fetchAchievements()
         } catch (error) {
             console.error("Failed to fetch user data:", error)
         } finally {
@@ -475,10 +505,10 @@ export function ProfilePage() {
                                 <CardDescription>Pets you're currently caring for</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {adoptions.filter((a) => a.status === "active").length > 0 ? (
+                                {adoptions.filter((a) => a.status === "active" || a.status === "pending").length > 0 ? (
                                     <div className="space-y-4">
                                         {adoptions
-                                            .filter((a) => a.status === "active")
+                                            .filter((a) => a.status === "active" || a.status === "pending")
                                             .map((adoption) => (
                                                 <div
                                                     key={adoption.id}
@@ -490,23 +520,37 @@ export function ProfilePage() {
                                                         className="w-16 h-16 rounded-xl object-cover"
                                                     />
                                                     <div className="flex-1">
-                                                        <h3 className="font-semibold text-lg">{adoption.petName}</h3>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            Adopted on {new Date(adoption.adoptionDate).toLocaleDateString()}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-2">
-                                                            <Badge variant="outline" className="text-xs">
-                                                                Day {adoption.currentDay}
-                                                            </Badge>
-                                                            <Badge className="text-xs">
-                                                                <Award className="w-3 h-3 mr-1" />
-                                                                {adoption.currentDay} day streak
-                                                            </Badge>
+                                                        <div className="flex justify-between items-start">
+                                                            <h3 className="font-semibold text-lg">{adoption.petName}</h3>
+                                                            {adoption.status === 'pending' && (
+                                                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                                                                    Pending Approval
+                                                                </Badge>
+                                                            )}
                                                         </div>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            {adoption.status === 'pending'
+                                                                ? `Application submitted on ${new Date(adoption.adoptionDate).toLocaleDateString()}`
+                                                                : `Adopted on ${new Date(adoption.adoptionDate).toLocaleDateString()}`
+                                                            }
+                                                        </p>
+                                                        {adoption.status === 'active' && (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    Day {adoption.currentDay}
+                                                                </Badge>
+                                                                <Badge className="text-xs">
+                                                                    <Award className="w-3 h-3 mr-1" />
+                                                                    {adoption.currentDay} day streak
+                                                                </Badge>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <Button asChild>
-                                                        <Link href="/dashboard">View Tracker</Link>
-                                                    </Button>
+                                                    {adoption.status === 'active' && (
+                                                        <Button asChild>
+                                                            <Link href="/dashboard">View Tracker</Link>
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             ))}
                                     </div>
@@ -660,23 +704,41 @@ export function ProfilePage() {
                                 <CardDescription>Milestones you've unlocked</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    <div className="p-4 bg-primary/10 rounded-xl text-center">
-                                        <Award className="w-8 h-8 text-primary mx-auto mb-2" />
-                                        <p className="font-semibold text-sm">First Adoption</p>
-                                        <p className="text-xs text-muted-foreground">Welcomed your first pet</p>
+                                {isLoadingAchievements ? (
+                                    <div className="py-8 text-center text-muted-foreground animate-pulse">Loading achievements...</div>
+                                ) : achievements.length > 0 ? (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        {achievements.map((achievement) => {
+                                            const Icon = {
+                                                Award: Award,
+                                                TrendingUp: TrendingUp,
+                                                Heart: Heart
+                                            }[achievement.icon] || Award;
+
+                                            // Dynamic classes based on color
+                                            const bgClass = achievement.color === 'primary' ? 'bg-primary/10' :
+                                                achievement.color === 'accent' ? 'bg-accent/10' : 'bg-muted/50';
+                                            const textClass = achievement.color === 'primary' ? 'text-primary' :
+                                                achievement.color === 'accent' ? 'text-accent' : 'text-muted-foreground';
+
+                                            return (
+                                                <div key={achievement.type} className={cn("p-4 rounded-xl text-center", bgClass)}>
+                                                    <Icon className={cn("w-8 h-8 mx-auto mb-2", textClass)} />
+                                                    <p className="font-semibold text-sm">{achievement.title}</p>
+                                                    <p className="text-xs text-muted-foreground">{achievement.description}</p>
+                                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                                        {new Date(achievement.achievedAt).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="p-4 bg-accent/10 rounded-xl text-center">
-                                        <TrendingUp className="w-8 h-8 text-accent mx-auto mb-2" />
-                                        <p className="font-semibold text-sm">10 Day Streak</p>
-                                        <p className="text-xs text-muted-foreground">Consistent care tracking</p>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <Award className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                                        <p className="text-muted-foreground">Complete activities to unlock badges!</p>
                                     </div>
-                                    <div className="p-4 bg-muted/50 rounded-xl text-center opacity-50">
-                                        <Heart className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                                        <p className="font-semibold text-sm">Bonding Master</p>
-                                        <p className="text-xs text-muted-foreground">Complete 90 day journey</p>
-                                    </div>
-                                </div>
+                                )}
                             </CardContent>
                         </Card>
 

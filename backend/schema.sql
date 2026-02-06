@@ -128,7 +128,9 @@ CREATE TABLE IF NOT EXISTS shelter_messages (
     message TEXT,
     is_read TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    pet_id INT
+    pet_id INT,
+    response TEXT,
+    responded_at DATETIME
 );
 
 -- Shelter Visits Table

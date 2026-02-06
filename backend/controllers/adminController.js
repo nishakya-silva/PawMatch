@@ -7,11 +7,8 @@ exports.uploadVerificationDoc = upload.single('document');
 
 exports.submitVerification = async (req, res) => {
     try {
-        const { registry_type, registration_number, userId } = req.body;
-        // userId should come from auth middleware usually, but here we might pass it in body for simplicity if middleware isn't strictly enforced everywhere yet. 
-        // Ideally req.user.id
-
-        const idToUpdate = userId; // or req.user.id
+        const { registry_type, registration_number } = req.body;
+        const idToUpdate = req.user.id;
 
         if (!req.file) {
             return res.status(400).json({ error: "Document is required" });

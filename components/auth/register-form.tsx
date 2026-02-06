@@ -24,22 +24,13 @@ export function RegisterForm() {
         const name = formData.get("name")
         const email = formData.get("email")
         const phone = formData.get("phone")
-        const nic = formData.get("nic")
         const password = formData.get("password")
-
-        // Client-side NIC validation
-        const nicRegex = /^([0-9]{9}[vVxX]|[0-9]{12})$/;
-        if (!nicRegex.test(nic as string)) {
-            setError("Invalid Sri Lankan NIC format");
-            setIsLoading(false);
-            return;
-        }
 
         try {
             const res = await fetch("http://localhost:5000/api/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, phone, nic, password }),
+                body: JSON.stringify({ name, email, phone, password }),
             })
 
             const data = await res.json()
@@ -102,14 +93,7 @@ export function RegisterForm() {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="nic">National ID (NIC)</Label>
-                            <div className="relative">
-                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                                <Input id="nic" name="nic" type="text" placeholder="123456789V or 200012345678" className="pl-10" required />
-                            </div>
-                            <p className="text-xs text-muted-foreground">Used for identity verification (One account per ID)</p>
-                        </div>
+
 
                         <div className="space-y-2">
                             <Label htmlFor="password">Password</Label>

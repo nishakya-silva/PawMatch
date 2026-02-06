@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, ArrowRight, Check, Dog, Home, Clock, Users, Zap, Heart, TreeDeciduous, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/providers/auth-provider"
 
 const quizQuestions = [
   {
@@ -119,6 +120,7 @@ const extraPetQuestions = [
 ]
 
 export function QuizFlow() {
+  const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [isComplete, setIsComplete] = useState(false)
@@ -155,12 +157,13 @@ export function QuizFlow() {
       const response = await fetch('http://localhost:5000/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers })
+        body: JSON.stringify({ answers, userId: user?.id })
       })
       const data = await response.json()
 
       if (data.success) {
         localStorage.setItem('pawmatch_matches', JSON.stringify(data.matches))
+        localStorage.setItem('pawmatch_quiz_timestamp', Date.now().toString())
         setIsComplete(true)
       } else {
         setIsComplete(true)

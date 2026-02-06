@@ -1,7 +1,12 @@
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env'), override: true });
+
+console.log('Initializing Cloudinary with:');
+console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('API Key:', process.env.CLOUDINARY_API_KEY ? 'Present' : 'Missing');
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

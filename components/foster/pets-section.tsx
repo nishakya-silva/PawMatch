@@ -13,7 +13,7 @@ const fosterPets = [
     breed: "Mixed Breed",
     age: "2 years",
     location: "Colombo",
-    image: "/friendly-brown-mixed-breed-dog.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356664/pawmatch/static/zc6enktpeo4fvn6n4evj.jpg",
     compatibility: 95,
     traits: ["Calm", "Good with kids", "House trained"],
   },
@@ -23,7 +23,7 @@ const fosterPets = [
     breed: "Local Breed",
     age: "1 year",
     location: "Kandy",
-    image: "/energetic-black-street-dog.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356662/pawmatch/static/f2knlxfmyo5mzhqaz3lp.jpg",
     compatibility: 88,
     traits: ["Energetic", "Loves walks", "Social"],
   },
@@ -33,7 +33,7 @@ const fosterPets = [
     breed: "Mixed Breed",
     age: "3 years",
     location: "Galle",
-    image: "/sweet-white-and-brown-dog.jpg",
+    image: "https://res.cloudinary.com/dd58qgsfx/image/upload/v1770356681/pawmatch/static/o5qc2jpoqjiet0bq9i7a.jpg",
     compatibility: 92,
     traits: ["Gentle", "Senior-friendly", "Quiet"],
   },
@@ -73,7 +73,7 @@ export function FosterPetsSection() {
             <p className="text-muted-foreground">Dogs ready for their 14-day trial home</p>
           </div>
           <Button variant="outline" asChild>
-            <Link href="/matches">View All Pets</Link>
+            <Link href="/matches?browse=all">View All Pets</Link>
           </Button>
         </div>
 
@@ -105,7 +105,7 @@ export function FosterPetsSection() {
 
                   <div className="flex items-center gap-1 text-sm text-muted-foreground mb-4">
                     <MapPin className="w-4 h-4" />
-                    {"Colombo Shelter"}
+                    {pet.shelter_name || "PawMatch Shelter"}
                   </div>
 
                   <div className="flex flex-wrap gap-2 mb-6">
@@ -131,7 +131,7 @@ export function FosterPetsSection() {
             <h3 className="text-xl font-bold mb-2">No foster dogs currently available</h3>
             <p className="text-muted-foreground mb-6">Check back soon or browse our full adoption list.</p>
             <Button asChild>
-              <Link href="/matches">Browse All Dogs</Link>
+              <Link href="/matches?browse=all">Browse All Dogs</Link>
             </Button>
           </div>
         )}

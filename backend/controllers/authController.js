@@ -16,18 +16,22 @@ exports.register = async (req, res) => {
         const { name, email, password, phone, nic, role, shelter_name } = req.body;
 
         // 1. Basic Validation
-        if (!email || !password || !name || !nic) {
-            return res.status(400).json({ error: 'Please enter all required fields including NIC' });
-        }
-
-        // 2. NIC Validation (MOVED UP: This must happen before using cleanNic)
-        const nicValidation = nicValidator(nic);
-        if (!nicValidation.valid) {
-            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
-        }
-        const cleanNic = nicValidation.nic;
-
         const userRole = role === 'shelter' ? 'shelter' : 'adopter';
+
+        // Remove NIC requirement for all roles to match simplified design
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: 'Please enter all required fields (Name, Email, Password)' });
+        }
+
+        // 2. NIC Validation (Only if provided)
+        let cleanNic = null;
+        if (nic) {
+            const nicValidation = nicValidator(nic);
+            if (!nicValidation.valid) {
+                return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
+            }
+            cleanNic = nicValidation.nic;
+        }
 
         // 3. Check if user exists in main table
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -66,10 +70,12 @@ exports.register = async (req, res) => {
 
         // --- New User Logic ---
 
-        // 4. Check if NIC already exists in main table
-        const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
-        if (nicCheckMain.rows.length > 0) {
-            return res.status(400).json({ error: 'This NIC is already registered' });
+        // 4. Check if NIC already exists in main table (only if NIC provided)
+        if (cleanNic) {
+            const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
+            if (nicCheckMain.rows.length > 0) {
+                return res.status(400).json({ error: 'This NIC is already registered' });
+            }
         }
 
         // 5. Hash Password & Generate OTP
@@ -88,8 +94,8 @@ exports.register = async (req, res) => {
             // Update existing pending record
             try {
                 await db.query(
-                    'UPDATE pending_users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                    [name, hashedPassword, phone || null, cleanNic, otpHash, otpExpiresAt, email]
+                    'UPDATE pending_users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                    [name, hashedPassword, phone || null, cleanNic, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
                 );
             } catch (err) {
                 if (err.code === 'ER_DUP_ENTRY') {
@@ -98,10 +104,12 @@ exports.register = async (req, res) => {
                 throw err;
             }
         } else {
-            // Check if NIC is in another pending record
-            const nicCheckPending = await db.query('SELECT * FROM pending_users WHERE nic = ?', [cleanNic]);
-            if (nicCheckPending.rows.length > 0) {
-                return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
+            // Check if NIC is in another pending record (only if NIC provided)
+            if (cleanNic) {
+                const nicCheckPending = await db.query('SELECT * FROM pending_users WHERE nic = ?', [cleanNic]);
+                if (nicCheckPending.rows.length > 0) {
+                    return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
+                }
             }
 
             // Insert new pending user
@@ -155,8 +163,8 @@ exports.verifyEmail = async (req, res) => {
 
         // Move to users table
         const insertRes = await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, nic, is_verified) VALUES (?, ?, ?, ?, ?, TRUE)',
-            [pendingUser.name, pendingUser.email, pendingUser.password_hash, pendingUser.phone_number, pendingUser.nic]
+            'INSERT INTO users (name, email, password_hash, phone_number, nic, role, shelter_name, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)',
+            [pendingUser.name, pendingUser.email, pendingUser.password_hash, pendingUser.phone_number, pendingUser.nic, pendingUser.role, pendingUser.shelter_name]
         );
 
         // Get the new user ID (mysql specific structure from our db wrapper)
@@ -171,6 +179,8 @@ exports.verifyEmail = async (req, res) => {
                 id: userId,
                 email: pendingUser.email,
                 name: pendingUser.name,
+                role: pendingUser.role,
+                shelter_name: pendingUser.shelter_name,
                 nic: pendingUser.nic
             }
         };
@@ -234,7 +244,7 @@ exports.resendOTP = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, requiredRole } = req.body;
 
         // Check for user
         const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -252,6 +262,14 @@ exports.login = async (req, res) => {
         }
 
         const user = users.rows[0];
+
+        // Role verification (optional filter)
+        if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
+            const roleName = requiredRole === 'shelter' ? 'shelter' : 'user';
+            return res.status(401).json({
+                error: `This account is not registered as a ${roleName}. Please use the correct sign-in page.`
+            });
+        }
 
         // Validate password
         const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -371,7 +389,7 @@ exports.resetPassword = async (req, res) => {
 // Get current user details
 exports.getMe = async (req, res) => {
     try {
-        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts FROM users WHERE id = ?', [req.user.id]);
+        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, verification_status FROM users WHERE id = ?', [req.user.id]);
         if (user.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }

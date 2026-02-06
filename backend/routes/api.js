@@ -6,6 +6,7 @@ const verifyController = require('../controllers/verifyController');
 const adoptionController = require('../controllers/adoptionController');
 const authController = require('../controllers/authController');
 const alertService = require('../services/alertService');
+const achievementController = require('../controllers/achievementController');
 
 const auth = require('../middleware/auth');
 
@@ -22,6 +23,7 @@ router.put('/update-password', auth, authController.updatePassword);
 router.put('/notifications', auth, authController.updateNotifications);
 router.delete('/account', auth, authController.deleteAccount);
 router.get('/logs', auth, authController.getActivityLogs);
+router.get('/achievements', auth, achievementController.getUserAchievements);
 
 // Match Routes
 router.post('/match', matchController.getMatches);
@@ -29,8 +31,11 @@ router.post('/match', matchController.getMatches);
 // Adoption Routes
 router.post('/adopt', auth, adoptionController.applyForAdoption);
 router.get('/adoptions/me', auth, adoptionController.getUserAdoptions);
+router.get('/shelter/applications', auth, adoptionController.getShelterApplications);
+router.post('/shelter/approve-adoption', auth, adoptionController.approveAdoption);
 
 // Welfare Routes
+router.get('/welfare/shelter/alerts', auth, welfareController.getShelterAlerts);
 router.get('/welfare/:adoptionId', auth, welfareController.getDashboard);
 router.post('/welfare/:adoptionId/log', auth, welfareController.postLog);
 
@@ -49,6 +54,7 @@ const petController = require('../controllers/petController');
 router.post('/pets', petController.uploadMiddleware, petController.addPet);
 router.get('/pets', petController.getAllPets);
 router.get('/pets/:id', petController.getPetById);
+router.put('/pets/:id', petController.uploadMiddleware, petController.updatePet);
 
 // Demo Routes
 const demoController = require('../controllers/demoController');
@@ -67,7 +73,10 @@ const shelterController = require('../controllers/shelterController');
 router.get('/shelter/:shelterId/visits', shelterController.getVisitRequests);
 router.put('/shelter/visits/:visitId', shelterController.updateVisitStatus);
 router.post('/shelter/message', auth, shelterController.sendMessage);
-router.get('/shelter/messages', auth, shelterController.getShelterMessages); // This would be for the shelter dashboard
+router.get('/shelter/messages', auth, shelterController.getShelterMessages);
+router.post('/shelter/message/respond', auth, shelterController.respondToMessage);
+router.get('/shelter/potential-matches', auth, shelterController.getPotentialMatches);
+router.get('/user/messages', auth, shelterController.getUserMessages);
 
 // Report Routes
 const reportController = require('../controllers/reportController');

@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { checkAndAwardAchievements } = require('../services/achievementService');
 
 exports.getDashboard = async (req, res) => {
     try {
@@ -97,30 +98,93 @@ exports.postLog = async (req, res) => {
         }
 
         // Insert Log
-        await db.query(`
+        const [insertResult] = await db.pool.query(`
             INSERT INTO welfare_logs (adoption_id, checklist, mood, notes)
             VALUES (?, ?, ?, ?)
         `, [adoptionId, JSON.stringify(checklist), mood, notes]);
 
-        // Risk detection logic...
-        const recentLogsRes = await db.query(`
-            SELECT mood FROM welfare_logs 
-            WHERE adoption_id = ? 
-            ORDER BY created_at DESC 
-            LIMIT 3
-        `, [adoptionId]);
+        const logId = insertResult.insertId;
 
-        const logs = recentLogsRes.rows || recentLogsRes;
-        const moods = logs.map(r => r.mood);
-        if (moods.length === 3 && moods.every(m => m === 'anxious')) {
-            await db.query('UPDATE welfare_logs SET risk_flagged = TRUE WHERE adoption_id = ? ORDER BY created_at DESC LIMIT 1', [adoptionId]);
-            console.log("RISK DETECTED: 3 days of anxiety for adoption", adoptionId);
+        // --- ENHANCED RISK DETECTION (Welfare Sentinel) ---
+        let riskReason = null;
+        const noteText = (notes || "").toLowerCase();
+
+        // 1. Immediate Red Flags in Mood/Notes
+        if (mood === 'lethargic') {
+            riskReason = "Immediate concern: Animal reported as lethargic.";
+        } else if (noteText.includes('sick') || noteText.includes('vomit') || noteText.includes('blood') || noteText.includes('injury') || noteText.includes('hurt')) {
+            riskReason = `Health concern detected in notes: "${notes.substring(0, 50)}..."`;
         }
 
-        res.json({ success: true, message: "Log saved" });
+        // 2. Critical Checklist Failures (e.g., didn't eat)
+        const parsedChecklist = checklist || {};
+        if (parsedChecklist.morning_feed === false && parsedChecklist.evening_feed === false) {
+            riskReason = "Animal has not eaten all day.";
+        }
+
+        // 3. Pattern Detection (3 days of anxiety)
+        if (!riskReason) {
+            const recentLogsRes = await db.query(`
+                SELECT mood FROM welfare_logs 
+                WHERE adoption_id = ? 
+                ORDER BY created_at DESC 
+                LIMIT 3
+            `, [adoptionId]);
+
+            const logs = recentLogsRes.rows || recentLogsRes;
+            const moods = logs.map(r => r.mood);
+            if (moods.length === 3 && moods.every(m => m === 'anxious' || m === 'withdrawn')) {
+                riskReason = "Persistent anxiety: 3 consecutive days of anxious/withdrawn behavior.";
+            }
+        }
+
+        if (riskReason) {
+            await db.query('UPDATE welfare_logs SET risk_flagged = TRUE, risk_reason = ? WHERE id = ?', [riskReason, logId]);
+            console.log(`[WELFARE SENTINEL] Risk flagged for adoption ${adoptionId}: ${riskReason}`);
+        }
+
+        // Check and award achievements
+        const newAchievements = await checkAndAwardAchievements(userId);
+
+        res.json({
+            success: true,
+            message: "Log saved",
+            risk_detected: !!riskReason,
+            achievements: newAchievements
+        });
 
     } catch (error) {
         console.error("Log Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+exports.getShelterAlerts = async (req, res) => {
+    try {
+        const shelterId = req.user.id;
+
+        const alertsRes = await db.query(`
+            SELECT 
+                l.*, 
+                p.name as pet_name, 
+                p.id as pet_id,
+                u.name as adopter_name,
+                u.email as adopter_email
+            FROM welfare_logs l
+            JOIN adoptions a ON l.adoption_id = a.id
+            JOIN pets p ON a.pet_id = p.id
+            JOIN users u ON a.user_id = u.id
+            WHERE p.shelter_id = ? AND l.risk_flagged = TRUE
+            ORDER BY l.created_at DESC
+        `, [shelterId]);
+
+        res.json({
+            success: true,
+            alerts: alertsRes.rows || alertsRes
+        });
+
+    } catch (error) {
+        console.error("Get Alerts Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };

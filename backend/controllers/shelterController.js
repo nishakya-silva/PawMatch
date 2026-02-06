@@ -2,29 +2,46 @@ const db = require('../config/db');
 
 exports.sendMessage = async (req, res) => {
     try {
-        const { adoptionId, subject, message } = req.body;
+        const { petId, adoptionId, subject, message } = req.body;
         const userId = req.user.id;
 
-        // 1. Get Shelter ID and Pet ID from the adoption record
-        const adoptionRes = await db.query(`
-            SELECT a.id, a.pet_id, p.shelter_id 
-            FROM adoptions a 
-            JOIN pets p ON a.pet_id = p.id 
-            WHERE a.id = ? AND a.user_id = ?
-        `, [adoptionId, userId]);
-
-        const adoptionArr = adoptionRes.rows || adoptionRes;
-        if (adoptionArr.length === 0) {
-            return res.status(404).json({ error: "Adoption record not found" });
+        if (!petId && !adoptionId) {
+            return res.status(400).json({ error: "Pet ID or Adoption ID is required" });
         }
 
-        const { shelter_id, pet_id } = adoptionArr[0];
+        let shelter_id;
+        let finalPetId = petId;
+
+        // If adoptionId provided, use it to verify
+        if (adoptionId) {
+            const adoptionRes = await db.query(`
+                SELECT a.id, a.pet_id, p.shelter_id 
+                FROM adoptions a 
+                JOIN pets p ON a.pet_id = p.id 
+                WHERE a.id = ? AND a.user_id = ?
+            `, [adoptionId, userId]);
+
+            const adoptionArr = adoptionRes.rows || adoptionRes;
+            if (adoptionArr.length === 0) {
+                return res.status(404).json({ error: "Adoption record not found" });
+            }
+            shelter_id = adoptionArr[0].shelter_id;
+            finalPetId = adoptionArr[0].pet_id;
+        } else {
+            // Use Pet ID directly
+            const petRes = await db.query('SELECT shelter_id FROM pets WHERE id = ?', [petId]);
+            const petArr = petRes.rows || petRes;
+            if (petArr.length === 0) {
+                return res.status(404).json({ error: "Pet not found" });
+            }
+            shelter_id = petArr[0].shelter_id;
+        }
 
         // 2. Insert Message
         await db.query(`
             INSERT INTO shelter_messages (user_id, adoption_id, pet_id, shelter_id, subject, message)
             VALUES (?, ?, ?, ?, ?, ?)
-        `, [userId, adoptionId, pet_id, shelter_id, subject, message]);
+        `, [userId, adoptionId || null, finalPetId, shelter_id, subject, message]);
 
         res.json({ success: true, message: "Message sent to shelter" });
 
@@ -36,18 +53,47 @@ exports.sendMessage = async (req, res) => {
 
 exports.getShelterMessages = async (req, res) => {
     try {
-        // This would be for the shelter dashboard
+        const shelterId = req.user.id;
+
         const resMsg = await db.query(`
-            SELECT m.*, u.name as user_name, p.name as pet_name, p.image_url as pet_image
+            SELECT m.*, u.name as user_name, u.email as user_email, p.name as pet_name, p.image_url as pet_image
             FROM shelter_messages m 
             JOIN users u ON m.user_id = u.id 
-            JOIN adoptions a ON m.adoption_id = a.id 
-            JOIN pets p ON a.pet_id = p.id 
+            JOIN pets p ON m.pet_id = p.id 
+            WHERE m.shelter_id = ?
             ORDER BY m.created_at DESC
-        `);
+        `, [shelterId]);
+
         res.json({ success: true, messages: resMsg.rows || resMsg });
     } catch (error) {
         console.error("Get Messages Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+exports.respondToMessage = async (req, res) => {
+    try {
+        const { messageId, response } = req.body;
+        const shelterId = req.user.id;
+
+        // Verify message belongs to this shelter
+        const messageRes = await db.query('SELECT * FROM shelter_messages WHERE id = ? AND shelter_id = ?', [messageId, shelterId]);
+        const messages = messageRes.rows || messageRes;
+
+        if (messages.length === 0) {
+            return res.status(404).json({ error: "Message not found or unauthorized" });
+        }
+
+        await db.query(`
+            UPDATE shelter_messages 
+            SET response = ?, responded_at = CURRENT_TIMESTAMP, is_read = 1 
+            WHERE id = ?
+        `, [response, messageId]);
+
+        res.json({ success: true, message: "Response sent successfully" });
+
+    } catch (error) {
+        console.error("Respond Message Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };
@@ -78,6 +124,79 @@ exports.updateVisitStatus = async (req, res) => {
         res.json({ success: true, message: "Status updated" });
     } catch (error) {
         console.error("Update Status Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+const matchingService = require('../services/matchingService');
+
+exports.getUserMessages = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const resMsg = await db.query(`
+            SELECT m.*, s.shelter_name as shelter_name, p.name as pet_name, p.image_url as pet_image
+            FROM shelter_messages m 
+            JOIN users s ON m.shelter_id = s.id 
+            JOIN pets p ON m.pet_id = p.id 
+            WHERE m.user_id = ?
+            ORDER BY m.created_at DESC
+        `, [userId]);
+        res.json({ success: true, messages: resMsg.rows || resMsg });
+    } catch (error) {
+        console.error("Get User Messages Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+exports.getPotentialMatches = async (req, res) => {
+    try {
+        const shelterId = req.user.id;
+
+        // 1. Get all available pets for this shelter
+        const petsRes = await db.query('SELECT * FROM pets WHERE shelter_id = ? AND status = "available"', [shelterId]);
+        const pets = petsRes.rows || petsRes;
+
+        // 2. Get all adopters who have quiz results
+        const usersRes = await db.query('SELECT id, name, email, pawsonality_results FROM users WHERE role = "adopter" AND pawsonality_results IS NOT NULL');
+        const users = usersRes.rows || usersRes;
+
+        const allPotentialMatches = [];
+
+        // 3. For each user, calculate matches and filter for this shelter's pets
+        for (const user of users) {
+            try {
+                const quizResults = JSON.parse(user.pawsonality_results);
+                // We use findMatches but we only care about the scores for our pets
+                // The service fetches all pets, but we can reuse the logic
+                const matches = await matchingService.findMatches(quizResults);
+
+                // Filter matches that belong to this shelter and have high score
+                const shelterMatches = matches.filter(m => m.shelter_id == shelterId && m.matchScore >= 80);
+
+                shelterMatches.forEach(match => {
+                    allPotentialMatches.push({
+                        id: `${user.id}-${match.id}`,
+                        user_id: user.id,
+                        user_name: user.name,
+                        user_email: user.email,
+                        pet_id: match.id,
+                        pet_name: match.name,
+                        pet_image: match.image_url,
+                        match_score: match.matchScore,
+                        match_reasons: match.matchReasons
+                    });
+                });
+            } catch (e) {
+                console.error(`Error processing matches for user ${user.id}:`, e);
+            }
+        }
+
+        // Sort by highest score
+        allPotentialMatches.sort((a, b) => b.match_score - a.match_score);
+
+        res.json({ success: true, matches: allPotentialMatches.slice(0, 20) });
+
+    } catch (error) {
+        console.error("Get Potential Matches Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };
