@@ -55,7 +55,7 @@ exports.register = async (req, res) => {
 
         // 5. Handle Pending Users (Upsert Logic)
         const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
-        
+
         if (pendingCheck.rows.length > 0) {
             // Update existing pending record
             await db.query(
@@ -87,8 +87,8 @@ exports.register = async (req, res) => {
 
 exports.verifyEmail = async (req, res) => {
     // Get a dedicated connection for Transaction
-    const connection = await db.pool.getConnection(); 
-    
+    const connection = await db.pool.getConnection();
+
     try {
         const { email, otp } = req.body;
 
@@ -127,7 +127,7 @@ exports.verifyEmail = async (req, res) => {
                 'INSERT INTO users (email, password_hash, role, is_email_verified) VALUES (?, ?, ?, TRUE)',
                 [pendingUser.email, pendingUser.password_hash, pendingUser.role]
             );
-            
+
             const newUserId = insertRes.insertId;
 
             // 5. Insert into Profile Table based on Role
@@ -135,9 +135,9 @@ exports.verifyEmail = async (req, res) => {
                 await connection.query(
                     'INSERT INTO shelters (user_id, organization_name, contact_number, registration_number, verification_status) VALUES (?, ?, ?, ?, ?)',
                     [
-                        newUserId, 
-                        pendingUser.shelter_name || pendingUser.name, 
-                        pendingUser.phone_number, 
+                        newUserId,
+                        pendingUser.shelter_name || pendingUser.name,
+                        pendingUser.phone_number,
                         pendingUser.nic, // Mapping NIC field to Registration Number for shelters
                         'pending' // Default status for new shelters
                     ]
@@ -355,9 +355,9 @@ exports.getMe = async (req, res) => {
         } else if (user.role === 'admin') {
             const pRes = await db.query('SELECT full_name, department FROM admins WHERE user_id = ?', [userId]);
             if (pRes.rows.length > 0) {
-                profile = { 
+                profile = {
                     name: pRes.rows[0].full_name,
-                    department: pRes.rows[0].department 
+                    department: pRes.rows[0].department
                 };
             }
         } else {
@@ -422,6 +422,172 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
-// ... Keep forgotPassword, resetPassword, updatePassword, updateNotifications, deleteAccount, getActivityLogs as is ...
-// (These usually work on the 'users' table or separate logs table which are largely unchanged, 
-// unless deleteAccount needs to cascade delete manually if you didn't set ON DELETE CASCADE in SQL)
+// Forgot Password - Initiate
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const userRes = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Generate Reset Token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        const resetExpiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
+
+        await db.query(
+            'UPDATE users SET reset_token_hash = ?, reset_token_expires_at = ? WHERE email = ?',
+            [resetTokenHash, resetExpiresAt, email]
+        );
+
+        // Construct Reset URL
+        const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+
+        await emailService.sendPasswordReset(email, resetUrl);
+
+        res.json({ success: true, message: "Password reset link sent" });
+    } catch (error) {
+        console.error("Forgot Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Reset Password - Complete
+exports.resetPassword = async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return res.status(400).json({ error: "Token and new password are required" });
+        }
+
+        const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        const userRes = await db.query(
+            'SELECT * FROM users WHERE reset_token_hash = ? AND reset_token_expires_at > NOW()',
+            [resetTokenHash]
+        );
+
+        if (userRes.rows.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired token" });
+        }
+
+        const user = userRes.rows[0];
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+
+        await db.query(
+            'UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = ?',
+            [passwordHash, user.id]
+        );
+
+        await logActivity(user.id, 'PASSWORD_RESET', { method: 'token' });
+        res.json({ success: true, message: "Password successfully reset" });
+
+    } catch (error) {
+        console.error("Reset Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Update Password (logged in)
+exports.updatePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user.id;
+
+        const userRes = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+
+        const user = userRes.rows[0];
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isMatch) {
+            return res.status(400).json({ error: "Incorrect current password" });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+
+        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+
+        await logActivity(userId, 'PASSWORD_UPDATE', {});
+        res.json({ success: true, message: "Password updated successfully" });
+
+    } catch (error) {
+        console.error("Update Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Update Notifications
+exports.updateNotifications = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { email_notifications } = req.body;
+
+        // Assuming toggle logic or specific boolean setting
+        await db.query('UPDATE users SET email_notifications = ? WHERE id = ?', [email_notifications, userId]);
+        
+        res.json({ success: true, message: "Notification preferences updated" });
+    } catch (error) {
+        console.error("Update Notifications Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+// Delete Account
+exports.deleteAccount = async (req, res) => {
+    const connection = await db.pool.getConnection();
+    try {
+        const userId = req.user.id;
+        await connection.beginTransaction();
+
+        // 1. Delete specialized profile data first (if FKs exist but not cascading)
+        // Check role to know which table
+        const userRes = await connection.query('SELECT role FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length > 0) {
+            const role = userRes.rows[0].role;
+            if (role === 'shelter') {
+                await connection.query('DELETE FROM shelters WHERE user_id = ?', [userId]);
+            } else if (role === 'admin') {
+                await connection.query('DELETE FROM admins WHERE user_id = ?', [userId]);
+            } else {
+                await connection.query('DELETE FROM adopters WHERE user_id = ?', [userId]);
+            }
+        }
+
+        // 2. Delete User
+        await connection.query('DELETE FROM users WHERE id = ?', [userId]);
+
+        await connection.commit();
+        res.json({ success: true, message: "Account deleted successfully" });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Delete Account Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    } finally {
+        if (connection) connection.release();
+    }
+};
+
+// Get Activity Logs
+exports.getActivityLogs = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const logs = await db.query(
+            'SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+            [userId]
+        );
+        res.json(logs.rows);
+    } catch (error) {
+        console.error("Get Logs Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
