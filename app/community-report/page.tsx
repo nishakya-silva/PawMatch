@@ -1,8 +1,3 @@
-import { CommunityReportForm } from "@/components/community/report-form"
-import { RecentReports } from "@/components/community/recent-reports"
-import { Navigation } from "@/components/ui/navigation"
-import { Footer } from "@/components/ui/footer"
-
 "use client"
 
 import { useEffect } from "react"
