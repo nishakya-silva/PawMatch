@@ -18,95 +18,52 @@ exports.register = async (req, res) => {
         // 1. Basic Validation
         const userRole = role === 'shelter' ? 'shelter' : 'adopter';
 
-        // NIC is now required for all users
-        if (!email || !password || !name || !nic) {
-            return res.status(400).json({ error: 'Please enter all required fields (Name, Email, Password, NIC)' });
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: 'Please enter all required fields' });
         }
 
-        // 2. NIC Validation (Mandatory)
-        const nicValidation = nicValidator(nic);
-        if (!nicValidation.valid) {
-            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
+        // 2. NIC/Registration Number Validation
+        // For shelters, we treat NIC input as Registration Number if provided, or handle per requirements
+        let cleanNic = null;
+        if (nic) {
+            // If it's a personal NIC, validate it. If it's a shelter Reg No, we might skip standard NIC validation
+            if (userRole === 'adopter') {
+                const nicValidation = nicValidator(nic);
+                if (!nicValidation.valid) {
+                    return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
+                }
+                cleanNic = nicValidation.nic;
+            } else {
+                // For shelters, just clean the input
+                cleanNic = nic.trim();
+            }
         }
         const cleanNic = nicValidation.nic;
 
-        // 3. Check if user exists in main table
+        // 3. Check if user exists in MAIN users table
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-
         if (userCheck.rows.length > 0) {
-            const existingUser = userCheck.rows[0];
-
-            if (existingUser.is_verified) {
-                return res.status(400).json({ error: 'User already exists' });
-            }
-
-            // --- Existing Unverified User Logic ---
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, salt);
-
-            const otp = generateOTP();
-            const otpSalt = await bcrypt.genSalt(10);
-            const otpHash = await bcrypt.hash(otp, otpSalt);
-            const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-            // Now cleanNic is defined and safe to use here
-            await db.query(
-                'UPDATE users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                [name, hashedPassword, phone || null, cleanNic, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
-            );
-
-            await emailService.sendOTP(email, otp);
-
-            return res.status(200).json({
-                success: true,
-                message: 'Registration successful. Please verify your email.',
-                requiresVerification: true,
-                email: email
-            });
+            return res.status(400).json({ error: 'User already exists' });
         }
 
-        // --- New User Logic ---
-
-        // 4. Check if NIC already exists in main table
-        const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
-        if (nicCheckMain.rows.length > 0) {
-            return res.status(400).json({ error: 'This NIC is already registered' });
-        }
-
-        // 5. Hash Password & Generate OTP
+        // 4. Hash Password & Generate OTP
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-
         const otp = generateOTP();
         const otpSalt = await bcrypt.genSalt(10);
         const otpHash = await bcrypt.hash(otp, otpSalt);
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-        // 6. Check Pending Users
+        // 5. Handle Pending Users (Upsert Logic)
         const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
 
         if (pendingCheck.rows.length > 0) {
             // Update existing pending record
-            try {
-                await db.query(
-                    'UPDATE pending_users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
-                    [name, hashedPassword, phone || null, cleanNic, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
-                );
-            } catch (err) {
-                if (err.code === 'ER_DUP_ENTRY') {
-                    return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
-                }
-                throw err;
-            }
+            await db.query(
+                'UPDATE pending_users SET name = ?, password_hash = ?, phone_number = ?, nic = ?, role = ?, shelter_name = ?, otp_hash = ?, otp_expires_at = ? WHERE email = ?',
+                [name, hashedPassword, phone || null, cleanNic, userRole, shelter_name || null, otpHash, otpExpiresAt, email]
+            );
         } else {
-            // Check if NIC is in another pending record (only if NIC provided)
-            if (cleanNic) {
-                const nicCheckPending = await db.query('SELECT * FROM pending_users WHERE nic = ?', [cleanNic]);
-                if (nicCheckPending.rows.length > 0) {
-                    return res.status(400).json({ error: 'This NIC is already being used in a pending registration' });
-                }
-            }
-
             // Insert new pending user
             await db.query(
                 'INSERT INTO pending_users (name, email, password_hash, phone_number, role, shelter_name, is_verified, nic, otp_hash, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -130,6 +87,9 @@ exports.register = async (req, res) => {
 };
 
 exports.verifyEmail = async (req, res) => {
+    // Get a dedicated connection for Transaction
+    const connection = await db.pool.getConnection();
+
     try {
         const { email, otp } = req.body;
 
@@ -137,69 +97,113 @@ exports.verifyEmail = async (req, res) => {
             return res.status(400).json({ error: 'Email and OTP are required' });
         }
 
-        // Find user in pending_users
-        const pendingUsers = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
-        if (pendingUsers.rows.length === 0) {
+        // 1. Find in Pending
+        const [pendingUsers] = await connection.query('SELECT * FROM pending_users WHERE email = ?', [email]);
+        if (pendingUsers.length === 0) {
+            connection.release();
             return res.status(400).json({ error: 'Verification record not found or already verified' });
         }
 
-        const pendingUser = pendingUsers.rows[0];
+        const pendingUser = pendingUsers[0];
 
-        // Check expiration
+        // 2. Check Expiry
         if (new Date() > new Date(pendingUser.otp_expires_at)) {
+            connection.release();
             return res.status(400).json({ error: 'OTP has expired' });
         }
 
-        // Verify OTP
+        // 3. Verify OTP Hash
         const isMatch = await bcrypt.compare(otp, pendingUser.otp_hash);
         if (!isMatch) {
+            connection.release();
             return res.status(400).json({ error: 'Invalid OTP' });
         }
 
-        // Move to users table
-        const insertRes = await db.query(
-            'INSERT INTO users (name, email, password_hash, phone_number, nic, role, shelter_name, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)',
-            [pendingUser.name, pendingUser.email, pendingUser.password_hash, pendingUser.phone_number, pendingUser.nic, pendingUser.role, pendingUser.shelter_name]
-        );
+        // --- START TRANSACTION ---
+        await connection.beginTransaction();
 
-        // Get the new user ID (mysql specific structure from our db wrapper)
-        const userId = insertRes.rows.insertId;
+        try {
+            // 4. Insert into Base Table (USERS)
+            const [insertRes] = await connection.query(
+                'INSERT INTO users (email, password_hash, role, is_email_verified) VALUES (?, ?, ?, TRUE)',
+                [pendingUser.email, pendingUser.password_hash, pendingUser.role]
+            );
 
-        // Delete from pending
-        await db.query('DELETE FROM pending_users WHERE id = ?', [pendingUser.id]);
+            const newUserId = insertRes.insertId;
 
-        // Generate token for auto-login
-        const payload = {
-            user: {
-                id: userId,
-                email: pendingUser.email,
-                name: pendingUser.name,
-                role: pendingUser.role,
-                shelter_name: pendingUser.shelter_name,
-                shelter_name: pendingUser.shelter_name,
-                nic: pendingUser.nic,
-                pawsonality_results: null
+            // 5. Insert into Profile Table based on Role
+            if (pendingUser.role === 'shelter') {
+                await connection.query(
+                    'INSERT INTO shelters (user_id, organization_name, contact_number, registration_number, verification_status) VALUES (?, ?, ?, ?, ?)',
+                    [
+                        newUserId,
+                        pendingUser.shelter_name || pendingUser.name,
+                        pendingUser.phone_number,
+                        pendingUser.nic, // Mapping NIC field to Registration Number for shelters
+                        'pending' // Default status for new shelters
+                    ]
+                );
+            } else if (pendingUser.role === 'admin') {
+                await connection.query(
+                    'INSERT INTO admins (user_id, full_name, department) VALUES (?, ?, ?)',
+                    [newUserId, pendingUser.name, 'General']
+                );
+            } else {
+                // Default: Adopter
+                await connection.query(
+                    'INSERT INTO adopters (user_id, full_name, phone_number) VALUES (?, ?, ?)',
+                    [newUserId, pendingUser.name, pendingUser.phone_number]
+                );
             }
-        };
 
-        jwt.sign(
-            payload,
-            process.env.JWT_SECRET || 'secret123',
-            { expiresIn: '1d' },
-            (err, token) => {
-                if (err) throw err;
-                res.json({
-                    success: true,
-                    message: 'Email successfully verified',
-                    token,
-                    user: payload.user
-                });
-            }
-        );
+            // 6. Delete from Pending
+            await connection.query('DELETE FROM pending_users WHERE id = ?', [pendingUser.id]);
+
+            // Commit Transaction
+            await connection.commit();
+
+            // 7. Generate Token
+            // We need to construct the payload carefully since we just inserted the data
+            const payload = {
+                user: {
+                    id: newUserId,
+                    email: pendingUser.email,
+                    role: pendingUser.role,
+                    // For convenience, add the name/shelter name to the token
+                    name: pendingUser.name,
+                    shelter_name: pendingUser.role === 'shelter' ? pendingUser.shelter_name : undefined,
+                    verification_status: pendingUser.role === 'shelter' ? 'pending' : undefined
+                }
+            };
+
+            jwt.sign(
+                payload,
+                process.env.JWT_SECRET || 'secret123',
+                { expiresIn: '1d' },
+                (err, token) => {
+                    if (err) throw err;
+                    res.json({
+                        success: true,
+                        message: 'Email successfully verified',
+                        token,
+                        user: payload.user
+                    });
+                }
+            );
+
+        } catch (txErr) {
+            // Rollback if any insert fails
+            await connection.rollback();
+            console.error("Transaction Error during verification:", txErr);
+            throw txErr;
+        }
 
     } catch (error) {
         console.error('Verification Error:', error);
         res.status(500).json({ error: 'Server Error' });
+    } finally {
+        // Always release the connection
+        if (connection) connection.release();
     }
 };
 
@@ -210,7 +214,7 @@ exports.resendOTP = async (req, res) => {
 
         const pendingCheck = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
         if (pendingCheck.rows.length === 0) {
-            // Check if already verified in users table
+            // Check if already verified
             const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
             if (userCheck.rows.length > 0) {
                 return res.status(400).json({ error: "User already verified" });
@@ -218,7 +222,6 @@ exports.resendOTP = async (req, res) => {
             return res.status(404).json({ error: "Verification record not found" });
         }
 
-        // Generate new OTP
         const otp = generateOTP();
         const otpSalt = await bcrypt.genSalt(10);
         const otpHash = await bcrypt.hash(otp, otpSalt);
@@ -230,7 +233,6 @@ exports.resendOTP = async (req, res) => {
         );
 
         await emailService.sendOTP(email, otp);
-
         res.json({ success: true, message: "OTP resent" });
 
     } catch (error) {
@@ -277,10 +279,11 @@ exports.login = async (req, res) => {
     try {
         const { email, password, requiredRole } = req.body;
 
-        // Check for user
+        // 1. Check User in Base Table
         const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+
         if (users.rows.length === 0) {
-            // Check if it's a pending account
+            // Check pending
             const pending = await db.query('SELECT * FROM pending_users WHERE email = ?', [email]);
             if (pending.rows.length > 0) {
                 return res.status(403).json({
@@ -294,7 +297,7 @@ exports.login = async (req, res) => {
 
         const user = users.rows[0];
 
-        // Role verification (optional filter)
+        // 2. Validate Role
         if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
             const roleName = requiredRole === 'shelter' ? 'shelter' : 'user';
             return res.status(401).json({
@@ -302,23 +305,44 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Validate password
+        // 3. Validate Password
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
-        // Create JWT (The is_verified check is no longer needed if we only keep verified users in the main table)
+        // 4. Fetch Profile Data (Because 'name' is no longer in 'users' table)
+        let profileName = "User";
+        let extraData = {};
+
+        if (user.role === 'shelter') {
+            const profileRes = await db.query('SELECT organization_name, verification_status FROM shelters WHERE user_id = ?', [user.id]);
+            if (profileRes.rows.length > 0) {
+                profileName = profileRes.rows[0].organization_name;
+                extraData.shelter_name = profileRes.rows[0].organization_name;
+                extraData.verification_status = profileRes.rows[0].verification_status;
+            }
+        } else if (user.role === 'admin') {
+            const profileRes = await db.query('SELECT full_name FROM admins WHERE user_id = ?', [user.id]);
+            if (profileRes.rows.length > 0) {
+                profileName = profileRes.rows[0].full_name;
+            }
+        } else {
+            // Adopter
+            const profileRes = await db.query('SELECT full_name FROM adopters WHERE user_id = ?', [user.id]);
+            if (profileRes.rows.length > 0) {
+                profileName = profileRes.rows[0].full_name;
+            }
+        }
+
+        // 5. Build Token
         const payload = {
             user: {
                 id: user.id,
                 email: user.email,
-                name: user.name,
                 role: user.role,
-                shelter_name: user.shelter_name,
-                verification_status: user.verification_status,
-                nic: user.nic,
-                pawsonality_results: user.pawsonality_results
+                name: profileName,
+                ...extraData
             }
         };
 
@@ -337,37 +361,129 @@ exports.login = async (req, res) => {
     }
 };
 
+exports.getMe = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // 1. Get Base User
+        const userRes = await db.query('SELECT id, email, role, is_email_verified FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const user = userRes.rows[0];
+
+        let profile = {};
+
+        // 2. Get Profile details from specific tables
+        if (user.role === 'shelter') {
+            const pRes = await db.query('SELECT organization_name, contact_number, verification_status, registration_number FROM shelters WHERE user_id = ?', [userId]);
+            if (pRes.rows.length > 0) {
+                const p = pRes.rows[0];
+                profile = {
+                    name: p.organization_name,
+                    shelter_name: p.organization_name,
+                    phone_number: p.contact_number,
+                    verification_status: p.verification_status,
+                    nic: p.registration_number // Return reg number as NIC for backward compatibility if needed
+                };
+            }
+        } else if (user.role === 'admin') {
+            const pRes = await db.query('SELECT full_name, department FROM admins WHERE user_id = ?', [userId]);
+            if (pRes.rows.length > 0) {
+                profile = {
+                    name: pRes.rows[0].full_name,
+                    department: pRes.rows[0].department
+                };
+            }
+        } else {
+            // Adopter
+            const pRes = await db.query('SELECT full_name, phone_number, pawsonality_results FROM adopters WHERE user_id = ?', [userId]);
+            if (pRes.rows.length > 0) {
+                profile = {
+                    name: pRes.rows[0].full_name,
+                    phone_number: pRes.rows[0].phone_number,
+                    pawsonality_results: pRes.rows[0].pawsonality_results
+                };
+            }
+        }
+
+        res.json({
+            ...user,
+            ...profile
+        });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
+exports.updateProfile = async (req, res) => {
+    const { name, phone_number } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const userRes = await db.query('SELECT role FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const role = userRes.rows[0].role;
+
+        // Update the specific table, NOT the users table
+        if (role === 'shelter') {
+            await db.query(
+                'UPDATE shelters SET organization_name = COALESCE(?, organization_name), contact_number = COALESCE(?, contact_number) WHERE user_id = ?',
+                [name, phone_number, userId]
+            );
+        } else if (role === 'admin') {
+            await db.query(
+                'UPDATE admins SET full_name = COALESCE(?, full_name) WHERE user_id = ?',
+                [name, userId]
+            );
+        } else {
+            // Adopter
+            await db.query(
+                'UPDATE adopters SET full_name = COALESCE(?, full_name), phone_number = COALESCE(?, phone_number) WHERE user_id = ?',
+                [name, phone_number, userId]
+            );
+        }
+
+        await logActivity(userId, 'PROFILE_UPDATE', { name, phone_number });
+        res.json({ success: true, message: 'Profile updated' });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+
 // Forgot Password - Initiate
 exports.forgotPassword = async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: "Email is required" });
 
-        const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (users.rows.length === 0) {
+        const userRes = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (userRes.rows.length === 0) {
             return res.status(404).json({ error: "User not found" });
         }
-
-        // Generate secure random token
+        
+        // Generate Reset Token
         const resetToken = crypto.randomBytes(32).toString('hex');
-        const tokenHash = await bcrypt.hash(resetToken, 10);
-        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        const resetExpiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
-        // Save token hash
         await db.query(
             'UPDATE users SET reset_token_hash = ?, reset_token_expires_at = ? WHERE email = ?',
-            [tokenHash, expiresAt, email]
+            [resetTokenHash, resetExpiresAt, email]
         );
 
-        // Send Link (Construct full URL based on frontend origin. Assuming localhost:3000 for dev)
-        // In prod, use environment variable for FRONTEND_URL
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+        // Construct Reset URL
+        const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
 
-        await emailService.sendPasswordReset(email, resetLink);
+        await emailService.sendPasswordReset(email, resetUrl);
 
-        res.json({ success: true, message: "Password reset link sent to your email" });
-
+        res.json({ success: true, message: "Password reset link sent" });
     } catch (error) {
         console.error("Forgot Password Error:", error);
         res.status(500).json({ error: "Server Error" });
@@ -377,40 +493,36 @@ exports.forgotPassword = async (req, res) => {
 // Reset Password - Complete
 exports.resetPassword = async (req, res) => {
     try {
-        const { email, token, newPassword } = req.body;
+        const { token, newPassword } = req.body;
 
-        if (!email || !token || !newPassword) {
-            return res.status(400).json({ error: "All fields are required" });
+        if (!token || !newPassword) {
+            return res.status(400).json({ error: "Token and new password are required" });
         }
 
-        const users = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (users.rows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
-        }
-        const user = users.rows[0];
+        const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-        // Check if token expired
-        if (!user.reset_token_expires_at || new Date() > new Date(user.reset_token_expires_at)) {
-            return res.status(400).json({ error: "Reset link has expired" });
-        }
+        const userRes = await db.query(
+            'SELECT * FROM users WHERE reset_token_hash = ? AND reset_token_expires_at > NOW()',
+            [resetTokenHash]
+        );
 
-        // Verify token
-        // Note: bcrypt checks hash. We store hash in DB.
-        const isMatch = await bcrypt.compare(token, user.reset_token_hash);
-        if (!isMatch) {
-            return res.status(400).json({ error: "Invalid reset token" });
+        if (userRes.rows.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired token" });
         }
 
-        // Update password
+        const user = userRes.rows[0];
+
+        // Hash new password
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
 
         await db.query(
             'UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = ?',
-            [hashedPassword, user.id]
+            [passwordHash, user.id]
         );
 
-        res.json({ success: true, message: "Password updated successfully" });
+        await logActivity(user.id, 'PASSWORD_RESET', { method: 'token' });
+        res.json({ success: true, message: "Password successfully reset" });
 
     } catch (error) {
         console.error("Reset Password Error:", error);
@@ -418,182 +530,99 @@ exports.resetPassword = async (req, res) => {
     }
 };
 
-// Get current user details
-exports.getMe = async (req, res) => {
-    try {
-        const userRes = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, shelter_code, shelter_slug, shelter_description, shelter_address, shelter_logo_url, shelter_banner_url, shelter_tagline, shelter_website, shelter_social_links, verification_status, pawsonality_results FROM users WHERE id = ?', [req.user.id]);
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const userData = userRes.rows[0];
-        let notifications = {
-            unread_messages: 0,
-            pending_applications: 0
-        };
-
-        if (userData.role === 'shelter') {
-            // Count unread messages
-            const msgRes = await db.query('SELECT COUNT(*) as count FROM shelter_messages WHERE shelter_id = ? AND is_read = 0', [req.user.id]);
-            notifications.unread_messages = parseInt(msgRes.rows[0].count || 0);
-
-            // Count pending adoptions
-            const appRes = await db.query(`
-                SELECT COUNT(*) as count 
-                FROM adoptions a 
-                JOIN pets p ON a.pet_id = p.id 
-                WHERE p.shelter_id = ? AND a.status = 'pending'
-            `, [req.user.id]);
-            notifications.pending_applications = parseInt(appRes.rows[0].count || 0);
-        } else if (userData.role === 'adopter') {
-            // Count unread responses
-            const msgRes = await db.query('SELECT COUNT(*) as count FROM shelter_messages WHERE user_id = ? AND is_response_read = 0 AND response IS NOT NULL', [req.user.id]);
-            notifications.unread_messages = parseInt(msgRes.rows[0].count || 0);
-
-            // Count unread adoption updates
-            const appRes = await db.query('SELECT COUNT(*) as count FROM adoptions WHERE user_id = ? AND is_status_read = 0', [req.user.id]);
-            notifications.pending_applications = parseInt(appRes.rows[0].count || 0);
-        }
-
-        res.json({ ...userData, ...notifications });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: 'Server Error' });
-    }
-};
-
-// Update user profile
-exports.updateProfile = async (req, res) => {
-    const { name, phone_number } = req.body;
-
-    try {
-        const user = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
-        if (user.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        await db.query(
-            'UPDATE users SET name = ?, phone_number = ? WHERE id = ?',
-            [name || user.rows[0].name, phone_number || user.rows[0].phone_number, req.user.id]
-        );
-
-        // Log activity
-        await logActivity(req.user.id, 'PROFILE_UPDATE', { name, phone_number });
-
-        const updatedUser = await db.query('SELECT id, name, email, phone_number, nic FROM users WHERE id = ?', [req.user.id]);
-
-        res.json({ success: true, user: updatedUser.rows[0] });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: 'Server Error' });
-    }
-};
-
-// Update Password
+// Update Password (logged in)
 exports.updatePassword = async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-
     try {
-        const users = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
-        if (users.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        const user = users.rows[0];
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user.id;
 
-        // Verify current password
+        const userRes = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "User not found" });
+
+        const user = userRes.rows[0];
+
         const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
         if (!isMatch) {
-            return res.status(400).json({ error: 'Incorrect current password' });
+            return res.status(400).json({ error: "Incorrect current password" });
         }
 
-        // Hash new password
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
 
-        await db.query(
-            'UPDATE users SET password_hash = ? WHERE id = ?',
-            [hashedPassword, req.user.id]
-        );
+        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
 
-        // Log activity
-        await logActivity(req.user.id, 'PASSWORD_CHANGE');
+        await logActivity(userId, 'PASSWORD_UPDATE', {});
+        res.json({ success: true, message: "Password updated successfully" });
 
-        res.json({ success: true, message: 'Password updated successfully' });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: 'Server Error' });
+    } catch (error) {
+        console.error("Update Password Error:", error);
+        res.status(500).json({ error: "Server Error" });
     }
 };
 
 // Update Notifications
 exports.updateNotifications = async (req, res) => {
-    const { email_notifications, sms_alerts } = req.body;
-
     try {
-        await db.query(
-            'UPDATE users SET email_notifications = ?, sms_alerts = ? WHERE id = ?',
-            [email_notifications, sms_alerts, req.user.id]
-        );
+        const userId = req.user.id;
+        const { email_notifications } = req.body;
 
-        res.json({ success: true, message: 'Notification preferences updated' });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: 'Server Error' });
+        // Assuming toggle logic or specific boolean setting
+        await db.query('UPDATE users SET email_notifications = ? WHERE id = ?', [email_notifications, userId]);
+        
+        res.json({ success: true, message: "Notification preferences updated" });
+    } catch (error) {
+        console.error("Update Notifications Error:", error);
+        res.status(500).json({ error: "Server Error" });
     }
 };
 
 // Delete Account
 exports.deleteAccount = async (req, res) => {
+    const connection = await db.pool.getConnection();
     try {
-        // First, check if user exists
-        const userCheck = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
-        if (userCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+        const userId = req.user.id;
+        await connection.beginTransaction();
+
+        // 1. Delete specialized profile data first (if FKs exist but not cascading)
+        // Check role to know which table
+        const userRes = await connection.query('SELECT role FROM users WHERE id = ?', [userId]);
+        if (userRes.rows.length > 0) {
+            const role = userRes.rows[0].role;
+            if (role === 'shelter') {
+                await connection.query('DELETE FROM shelters WHERE user_id = ?', [userId]);
+            } else if (role === 'admin') {
+                await connection.query('DELETE FROM admins WHERE user_id = ?', [userId]);
+            } else {
+                await connection.query('DELETE FROM adopters WHERE user_id = ?', [userId]);
+            }
         }
 
-        // Delete user's adoptions first (foreign key constraints)
-        // If there are other related tables, delete from them too
-        await db.query('DELETE FROM adoptions WHERE user_id = ?', [req.user.id]);
+        // 2. Delete User
+        await connection.query('DELETE FROM users WHERE id = ?', [userId]);
 
-        // Finally delete user
-        await db.query('DELETE FROM users WHERE id = ?', [req.user.id]);
+        await connection.commit();
+        res.json({ success: true, message: "Account deleted successfully" });
 
-        res.json({ success: true, message: 'Account deleted successfully' });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: 'Server Error' });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Delete Account Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    } finally {
+        if (connection) connection.release();
     }
 };
 
-// Get User Activity Logs
+// Get Activity Logs
 exports.getActivityLogs = async (req, res) => {
     try {
+        const userId = req.user.id;
         const logs = await db.query(
             'SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
-            [req.user.id]
+            [userId]
         );
-        res.json({ success: true, logs: logs.rows });
-    } catch (err) {
-        console.error("Fetch Activity Logs Error:", err);
-        res.status(500).json({ error: 'Server Error' });
+        res.json(logs.rows);
+    } catch (error) {
+        console.error("Get Logs Error:", error);
+        res.status(500).json({ error: "Server Error" });
     }
 };
-// Mark notifications as read
-exports.markNotificationsRead = async (req, res) => {
-    try {
-        const { type } = req.body; // 'message' or 'application'
-        const userId = req.user.id;
-
-        if (type === 'message') {
-            await db.query('UPDATE shelter_messages SET is_response_read = 1 WHERE user_id = ? AND is_response_read = 0', [userId]);
-        } else if (type === 'application') {
-            await db.query('UPDATE adoptions SET is_status_read = 1 WHERE user_id = ? AND is_status_read = 0', [userId]);
-        }
-
-        res.json({ success: true, message: 'Notifications marked as read' });
-    } catch (e) {
-        console.error('Mark Read Error:', e);
-        res.status(500).json({ error: 'Server Error' });
-    }
-};
-
