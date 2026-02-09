@@ -27,7 +27,9 @@ interface PetProfileProps {
 }
 
 export function PetProfile({ id }: PetProfileProps) {
-  const { user, token } = useAuth()
+  const { user, token, isLoading: isAuthLoading } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const showCompatibility = !isAdmin
   const router = useRouter()
   const [pet, setPet] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -216,27 +218,37 @@ export function PetProfile({ id }: PetProfileProps) {
 
   // Try to get match info from localStorage
   let matchInfo = { compatibility: 0, reasons: [] }
-  try {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pawmatch_matches')
-      const timestamp = localStorage.getItem('pawmatch_quiz_timestamp')
-      const oneHourInMs = 60 * 60 * 1000
 
-      const isExpired = !timestamp || (Date.now() - parseInt(timestamp) > oneHourInMs)
+  // Only calculate if auth is settled to avoid flashes
+  if (!isAuthLoading) {
+    const storedUserId = localStorage.getItem('pawmatch_quiz_user_id') || '';
+    const currentUserId = user ? user.id.toString() : '';
+    const canShowCompatibility = storedUserId === currentUserId;
 
-      if (stored && !isExpired) {
-        const matches = JSON.parse(stored)
-        const found = matches.find((m: any) => m.id === pet.id)
-        if (found) {
-          matchInfo = {
-            compatibility: found.matchScore || found.compatibility || 0,
-            reasons: found.matchReasons || found.reasons || []
+    if (canShowCompatibility) {
+      try {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('pawmatch_matches')
+          const timestamp = localStorage.getItem('pawmatch_quiz_timestamp')
+          const oneHourInMs = 60 * 60 * 1000
+
+          const isExpired = !timestamp || (Date.now() - parseInt(timestamp) > oneHourInMs)
+
+          if (stored && !isExpired) {
+            const matches = JSON.parse(stored)
+            const found = matches.find((m: any) => m.id === pet.id)
+            if (found) {
+              matchInfo = {
+                compatibility: found.matchScore || found.compatibility || 0,
+                reasons: found.matchReasons || found.reasons || []
+              }
+            }
           }
         }
+      } catch (e) {
+        console.error("Local storage error", e)
       }
     }
-  } catch (e) {
-    console.error("Local storage error", e)
   }
 
   const images = pet.image_url ? [pet.image_url] : ["/placeholder.svg?height=600&width=600"]
@@ -342,7 +354,9 @@ export function PetProfile({ id }: PetProfileProps) {
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-3xl font-bold text-foreground">{displayData.name}</h1>
-                  <Badge className="bg-accent text-accent-foreground text-sm">{displayData.compatibility}% Match</Badge>
+                  {showCompatibility && (
+                    <Badge className="bg-accent text-accent-foreground text-sm">{displayData.compatibility}% Match</Badge>
+                  )}
                   {displayData.status === 'adopted' && (
                     <Badge variant="outline" className="text-green-600 border-green-600 font-bold ml-2">ADOPTED</Badge>
                   )}
@@ -350,9 +364,11 @@ export function PetProfile({ id }: PetProfileProps) {
                 <p className="text-lg text-muted-foreground">{displayData.breed}</p>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={() => setIsFavorite(!isFavorite)}>
-                  <Heart className={cn("w-5 h-5", isFavorite && "fill-primary text-primary")} />
-                </Button>
+                {!isAdmin && (
+                  <Button variant="outline" size="icon" onClick={() => setIsFavorite(!isFavorite)}>
+                    <Heart className={cn("w-5 h-5", isFavorite && "fill-primary text-primary")} />
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -388,25 +404,27 @@ export function PetProfile({ id }: PetProfileProps) {
               ))}
             </div>
 
-            <Tabs defaultValue="compatibility" className="w-full">
-              <TabsList className="grid grid-cols-3 w-full">
-                <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
+            <Tabs defaultValue={showCompatibility ? "compatibility" : "story"} className="w-full">
+              <TabsList className={cn("grid w-full", showCompatibility ? "grid-cols-3" : "grid-cols-2")}>
+                {showCompatibility && <TabsTrigger value="compatibility">Compatibility</TabsTrigger>}
                 <TabsTrigger value="story">Story</TabsTrigger>
                 <TabsTrigger value="traits">Traits</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="compatibility" className="space-y-4 mt-4">
-                {displayData.compatibilityBreakdown.map((item: any) => (
-                  <div key={item.label} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-foreground">{item.label}</span>
-                      <span className="text-sm text-primary font-semibold">{item.score}%</span>
+              {showCompatibility && (
+                <TabsContent value="compatibility" className="space-y-4 mt-4">
+                  {displayData.compatibilityBreakdown.map((item: any) => (
+                    <div key={item.label} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-foreground">{item.label}</span>
+                        <span className="text-sm text-primary font-semibold">{item.score}%</span>
+                      </div>
+                      <Progress value={item.score} className="h-2" />
+                      <p className="text-sm text-muted-foreground">{item.description}</p>
                     </div>
-                    <Progress value={item.score} className="h-2" />
-                    <p className="text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                ))}
-              </TabsContent>
+                  ))}
+                </TabsContent>
+              )}
 
               <TabsContent value="story" className="mt-4">
                 <p className="text-foreground leading-relaxed">{displayData.description || "No story available yet."}</p>
@@ -437,30 +455,32 @@ export function PetProfile({ id }: PetProfileProps) {
               </TabsContent>
             </Tabs>
 
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Button
-                size="lg"
-                className="flex-1"
-                onClick={() => setIsConfirmModalOpen(true)}
-                disabled={isAdopting || displayData.status === 'adopted' || hasApplied}
-              >
-                {displayData.status === 'adopted'
-                  ? 'Already Adopted'
-                  : hasApplied
-                    ? 'Application Pending'
-                    : displayData.is_foster
-                      ? 'Start Fostering'
-                      : 'Submit Adoption Application'}
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="flex-1 bg-transparent"
-                onClick={() => setIsVisitModalOpen(true)}
-              >
-                Schedule a Visit
-              </Button>
-            </div>
+            {!isAdmin && (
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <Button
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => setIsConfirmModalOpen(true)}
+                  disabled={isAdopting || displayData.status === 'adopted' || hasApplied}
+                >
+                  {displayData.status === 'adopted'
+                    ? 'Already Adopted'
+                    : hasApplied
+                      ? 'Application Pending'
+                      : displayData.is_foster
+                        ? 'Start Fostering'
+                        : 'Submit Adoption Application'}
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="flex-1 bg-transparent"
+                  onClick={() => setIsVisitModalOpen(true)}
+                >
+                  Schedule a Visit
+                </Button>
+              </div>
+            )}
             <div className="flex pt-2">
               <Button variant="ghost" className="w-full" onClick={() => setIsMessageModalOpen(true)}>
                 <Mail className="w-4 h-4 mr-2" />
@@ -619,6 +639,6 @@ export function PetProfile({ id }: PetProfileProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   )
 }

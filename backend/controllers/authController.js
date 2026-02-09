@@ -18,20 +18,17 @@ exports.register = async (req, res) => {
         // 1. Basic Validation
         const userRole = role === 'shelter' ? 'shelter' : 'adopter';
 
-        // Remove NIC requirement for all roles to match simplified design
-        if (!email || !password || !name) {
-            return res.status(400).json({ error: 'Please enter all required fields (Name, Email, Password)' });
+        // NIC is now required for all users
+        if (!email || !password || !name || !nic) {
+            return res.status(400).json({ error: 'Please enter all required fields (Name, Email, Password, NIC)' });
         }
 
-        // 2. NIC Validation (Only if provided)
-        let cleanNic = null;
-        if (nic) {
-            const nicValidation = nicValidator(nic);
-            if (!nicValidation.valid) {
-                return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
-            }
-            cleanNic = nicValidation.nic;
+        // 2. NIC Validation (Mandatory)
+        const nicValidation = nicValidator(nic);
+        if (!nicValidation.valid) {
+            return res.status(400).json({ error: `Invalid NIC: ${nicValidation.error}` });
         }
+        const cleanNic = nicValidation.nic;
 
         // 3. Check if user exists in main table
         const userCheck = await db.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -70,12 +67,10 @@ exports.register = async (req, res) => {
 
         // --- New User Logic ---
 
-        // 4. Check if NIC already exists in main table (only if NIC provided)
-        if (cleanNic) {
-            const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
-            if (nicCheckMain.rows.length > 0) {
-                return res.status(400).json({ error: 'This NIC is already registered' });
-            }
+        // 4. Check if NIC already exists in main table
+        const nicCheckMain = await db.query('SELECT * FROM users WHERE nic = ?', [cleanNic]);
+        if (nicCheckMain.rows.length > 0) {
+            return res.status(400).json({ error: 'This NIC is already registered' });
         }
 
         // 5. Hash Password & Generate OTP
@@ -181,7 +176,9 @@ exports.verifyEmail = async (req, res) => {
                 name: pendingUser.name,
                 role: pendingUser.role,
                 shelter_name: pendingUser.shelter_name,
-                nic: pendingUser.nic
+                shelter_name: pendingUser.shelter_name,
+                nic: pendingUser.nic,
+                pawsonality_results: null
             }
         };
 
@@ -242,6 +239,40 @@ exports.resendOTP = async (req, res) => {
     }
 };
 
+exports.validateNIC = async (req, res) => {
+    try {
+        const { nic } = req.body;
+
+        if (!nic) {
+            return res.status(400).json({ valid: false, error: "NIC is required" });
+        }
+
+        const validation = nicValidator(nic);
+
+        if (!validation.valid) {
+            return res.json({
+                valid: false,
+                error: validation.error
+            });
+        }
+
+        // Return validation details
+        res.json({
+            valid: true,
+            nic: validation.nic,
+            type: validation.type,
+            birthYear: validation.birthYear,
+            gender: validation.gender,
+            dayOfYear: validation.dayOfYear,
+            isLeapYear: validation.isLeapYear
+        });
+
+    } catch (error) {
+        console.error("NIC Validation Error:", error);
+        res.status(500).json({ valid: false, error: "Server Error" });
+    }
+};
+
 exports.login = async (req, res) => {
     try {
         const { email, password, requiredRole } = req.body;
@@ -286,7 +317,8 @@ exports.login = async (req, res) => {
                 role: user.role,
                 shelter_name: user.shelter_name,
                 verification_status: user.verification_status,
-                nic: user.nic
+                nic: user.nic,
+                pawsonality_results: user.pawsonality_results
             }
         };
 
@@ -389,11 +421,41 @@ exports.resetPassword = async (req, res) => {
 // Get current user details
 exports.getMe = async (req, res) => {
     try {
-        const user = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, shelter_code, shelter_slug, shelter_description, shelter_address, shelter_logo_url, shelter_banner_url, shelter_tagline, shelter_website, shelter_social_links, verification_status FROM users WHERE id = ?', [req.user.id]);
-        if (user.rows.length === 0) {
+        const userRes = await db.query('SELECT id, name, email, phone_number, nic, email_notifications, sms_alerts, role, shelter_name, shelter_code, shelter_slug, shelter_description, shelter_address, shelter_logo_url, shelter_banner_url, shelter_tagline, shelter_website, shelter_social_links, verification_status, pawsonality_results FROM users WHERE id = ?', [req.user.id]);
+        if (userRes.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
-        res.json(user.rows[0]);
+
+        const userData = userRes.rows[0];
+        let notifications = {
+            unread_messages: 0,
+            pending_applications: 0
+        };
+
+        if (userData.role === 'shelter') {
+            // Count unread messages
+            const msgRes = await db.query('SELECT COUNT(*) as count FROM shelter_messages WHERE shelter_id = ? AND is_read = 0', [req.user.id]);
+            notifications.unread_messages = parseInt(msgRes.rows[0].count || 0);
+
+            // Count pending adoptions
+            const appRes = await db.query(`
+                SELECT COUNT(*) as count 
+                FROM adoptions a 
+                JOIN pets p ON a.pet_id = p.id 
+                WHERE p.shelter_id = ? AND a.status = 'pending'
+            `, [req.user.id]);
+            notifications.pending_applications = parseInt(appRes.rows[0].count || 0);
+        } else if (userData.role === 'adopter') {
+            // Count unread responses
+            const msgRes = await db.query('SELECT COUNT(*) as count FROM shelter_messages WHERE user_id = ? AND is_response_read = 0 AND response IS NOT NULL', [req.user.id]);
+            notifications.unread_messages = parseInt(msgRes.rows[0].count || 0);
+
+            // Count unread adoption updates
+            const appRes = await db.query('SELECT COUNT(*) as count FROM adoptions WHERE user_id = ? AND is_status_read = 0', [req.user.id]);
+            notifications.pending_applications = parseInt(appRes.rows[0].count || 0);
+        }
+
+        res.json({ ...userData, ...notifications });
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ error: 'Server Error' });
@@ -516,3 +578,22 @@ exports.getActivityLogs = async (req, res) => {
         res.status(500).json({ error: 'Server Error' });
     }
 };
+// Mark notifications as read
+exports.markNotificationsRead = async (req, res) => {
+    try {
+        const { type } = req.body; // 'message' or 'application'
+        const userId = req.user.id;
+
+        if (type === 'message') {
+            await db.query('UPDATE shelter_messages SET is_response_read = 1 WHERE user_id = ? AND is_response_read = 0', [userId]);
+        } else if (type === 'application') {
+            await db.query('UPDATE adoptions SET is_status_read = 1 WHERE user_id = ? AND is_status_read = 0', [userId]);
+        }
+
+        res.json({ success: true, message: 'Notifications marked as read' });
+    } catch (e) {
+        console.error('Mark Read Error:', e);
+        res.status(500).json({ error: 'Server Error' });
+    }
+};
+

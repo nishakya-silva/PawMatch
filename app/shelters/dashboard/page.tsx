@@ -15,7 +15,7 @@ import { VerifyShelterCard } from "@/components/shelters/verify-shelter-card"
 import { EditPetDialog } from "@/components/shelters/edit-pet-dialog"
 
 export default function ShelterDashboardPage() {
-    const { user } = useAuth()
+    const { user, refreshUser } = useAuth()
     const [verificationStatus, setVerificationStatus] = useState<string>('unverified')
     const [pets, setPets] = useState<any[]>([])
     const [messages, setMessages] = useState<any[]>([])
@@ -44,10 +44,13 @@ export default function ShelterDashboardPage() {
     const fetchPets = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/pets');
+            const token = sessionStorage.getItem('token');
+            if (!token) return;
+            const res = await fetch('http://localhost:5000/api/shelter/pets', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await res.json();
             if (data.success) {
-                // In a real app, filter by shelter_id
                 setPets(data.pets);
             }
         } catch (e) {
@@ -140,6 +143,9 @@ export default function ShelterDashboardPage() {
             if (res.ok) {
                 fetchApplications(); // refreshing lists
                 fetchPets();
+                if (refreshUser && user) {
+                    refreshUser({ ...user, pending_applications: Math.max(0, (user.pending_applications || 0) - 1) })
+                }
             }
         } catch (e) {
             console.error(e);
@@ -164,10 +170,13 @@ export default function ShelterDashboardPage() {
             if (res.ok) {
                 // Update local state
                 setMessages(messages.map(m =>
-                    m.id === messageId ? { ...m, response: responseText, responded_at: new Date().toISOString() } : m
+                    m.id === messageId ? { ...m, response: responseText, responded_at: new Date().toISOString(), is_read: 1 } : m
                 ));
                 setIsResponding(null);
                 setResponseText("");
+                if (refreshUser && user) {
+                    refreshUser({ ...user, unread_messages: Math.max(0, (user.unread_messages || 0) - 1) })
+                }
             }
         } catch (e) {
             console.error(e);
@@ -237,7 +246,7 @@ export default function ShelterDashboardPage() {
                                 <FileText className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">12</div>
+                                <div className="text-2xl font-bold">{applications.length}</div>
                                 <p className="text-xs text-muted-foreground">Active applications</p>
                             </CardContent>
                         </Card>
@@ -255,9 +264,23 @@ export default function ShelterDashboardPage() {
 
                     <Tabs defaultValue="pets" className="space-y-6">
                         <TabsList>
-                            <TabsTrigger value="applications">Applications</TabsTrigger>
+                            <TabsTrigger value="applications" className="relative">
+                                Applications
+                                {applications.length > 0 && (
+                                    <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                                        {applications.length}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
                             <TabsTrigger value="pets">Dogs in the Shelter</TabsTrigger>
-                            <TabsTrigger value="messages">Messages</TabsTrigger>
+                            <TabsTrigger value="messages" className="relative">
+                                Messages
+                                {messages.filter(m => !m.is_read).length > 0 && (
+                                    <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+                                        {messages.filter(m => !m.is_read).length}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
                             <TabsTrigger value="welfare">Welfare sentinel</TabsTrigger>
                         </TabsList>
 
@@ -335,7 +358,7 @@ export default function ShelterDashboardPage() {
                                                 <div key={pet.id} className="flex items-center justify-between p-4 border rounded-xl hover:bg-accent/5 transition-all shadow-sm">
                                                     <div className="flex items-center gap-4">
                                                         <img
-                                                            src={pet.profile_image_url || "/placeholder.jpg"}
+                                                            src={pet.image_url || "/placeholder.jpg"}
                                                             alt={pet.name}
                                                             className="w-20 h-20 rounded-xl object-cover border"
                                                         />

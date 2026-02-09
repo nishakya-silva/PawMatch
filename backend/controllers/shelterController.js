@@ -86,7 +86,7 @@ exports.respondToMessage = async (req, res) => {
 
         await db.query(`
             UPDATE shelter_messages 
-            SET response = ?, responded_at = CURRENT_TIMESTAMP, is_read = 1 
+            SET response = ?, responded_at = CURRENT_TIMESTAMP, is_read = 1, is_response_read = 0 
             WHERE id = ?
         `, [response, messageId]);
 
@@ -227,7 +227,7 @@ exports.getShelterPublicProfile = async (req, res) => {
         const petsRes = await db.query(`
             SELECT id, name, type, breed, age, gender, size, image_url, status, is_foster
             FROM pets 
-            WHERE shelter_id = ? AND status = 'available'
+            WHERE shelter_id = ? 
             ORDER BY created_at DESC
         `, [id]);
 
@@ -241,6 +241,19 @@ exports.getShelterPublicProfile = async (req, res) => {
 
     } catch (error) {
         console.error("Get Public Profile Error:", error);
+        res.status(500).json({ error: "Server Error" });
+    }
+};
+
+exports.getShelterPets = async (req, res) => {
+    try {
+        const shelterId = req.user.id;
+        const petsRes = await db.query('SELECT * FROM pets WHERE shelter_id = ? ORDER BY created_at DESC', [shelterId]);
+        const pets = petsRes.rows || petsRes;
+
+        res.json({ success: true, pets });
+    } catch (error) {
+        console.error("Get Shelter Pets Error:", error);
         res.status(500).json({ error: "Server Error" });
     }
 };

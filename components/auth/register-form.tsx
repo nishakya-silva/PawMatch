@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Dog, Mail, Lock, User, Phone, ArrowRight, Eye, EyeOff } from "lucide-react"
+import { Dog, Mail, Lock, User, Phone, ArrowRight, Eye, EyeOff, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -14,6 +14,35 @@ export function RegisterForm() {
     const [showPassword, setShowPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
+    const [nic, setNic] = useState("")
+    const [nicValidation, setNicValidation] = useState<{ valid: boolean; message: string } | null>(null)
+
+    const validateNIC = async (value: string) => {
+        if (!value.trim()) {
+            setNicValidation(null)
+            return
+        }
+
+        try {
+            const res = await fetch("http://localhost:5000/api/validate-nic", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ nic: value }),
+            })
+            const data = await res.json()
+
+            if (data.valid) {
+                setNicValidation({
+                    valid: true,
+                    message: `Valid ${data.type} NIC • ${data.gender} • Born ${data.birthYear}`
+                })
+            } else {
+                setNicValidation({ valid: false, message: data.error || "Invalid NIC" })
+            }
+        } catch (err) {
+            setNicValidation({ valid: false, message: "Unable to validate NIC" })
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -24,13 +53,21 @@ export function RegisterForm() {
         const name = formData.get("name")
         const email = formData.get("email")
         const phone = formData.get("phone")
+        const nicValue = formData.get("nic")
         const password = formData.get("password")
+
+        // Validate NIC before submission
+        if (!nicValidation || !nicValidation.valid) {
+            setError("Please enter a valid NIC number")
+            setIsLoading(false)
+            return
+        }
 
         try {
             const res = await fetch("http://localhost:5000/api/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, phone, password }),
+                body: JSON.stringify({ name, email, phone, nic: nicValue, password }),
             })
 
             const data = await res.json()
@@ -91,6 +128,46 @@ export function RegisterForm() {
                                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                                 <Input id="phone" name="phone" type="tel" placeholder="+1 (555) 000-0000" className="pl-10" />
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="nic">
+                                National Identity Card (NIC) <span className="text-destructive">*</span>
+                            </Label>
+                            <div className="relative">
+                                <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                                <Input
+                                    id="nic"
+                                    name="nic"
+                                    type="text"
+                                    placeholder="123456789V or 200012345678"
+                                    className={`pl-10 pr-10 ${nicValidation ? (nicValidation.valid ? 'border-green-500' : 'border-destructive') : ''}`}
+                                    value={nic}
+                                    onChange={(e) => {
+                                        const value = e.target.value
+                                        setNic(value)
+                                        validateNIC(value)
+                                    }}
+                                    required
+                                />
+                                {nicValidation && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        {nicValidation.valid ? (
+                                            <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                        ) : (
+                                            <AlertCircle className="w-5 h-5 text-destructive" />
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            {nicValidation && (
+                                <p className={`text-xs ${nicValidation.valid ? 'text-green-600' : 'text-destructive'} flex items-center gap-1`}>
+                                    {nicValidation.message}
+                                </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                Enter your Sri Lankan NIC (Old: 9 digits + V/X, New: 12 digits)
+                            </p>
                         </div>
 
 

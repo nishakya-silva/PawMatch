@@ -17,6 +17,9 @@ interface User {
     email_notifications?: boolean
     sms_alerts?: boolean
     created_at?: string
+    pawsonality_results?: string | null
+    unread_messages?: number
+    pending_applications?: number
 
 }
 
@@ -67,6 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = () => {
         sessionStorage.removeItem("token")
         sessionStorage.removeItem("user")
+        localStorage.removeItem("pawmatch_matches")
+        localStorage.removeItem("pawmatch_quiz_timestamp")
         setToken(null)
         setUser(null)
         router.push("/login")

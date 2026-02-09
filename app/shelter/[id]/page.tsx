@@ -131,7 +131,7 @@ export default function ShelterProfilePage() {
                                 <h2 className="text-2xl font-bold mb-4">About the Shelter</h2>
                                 <div className="prose prose-neutral dark:prose-invert max-w-none">
                                     <p className="text-muted-foreground leading-relaxed text-lg">
-                                        {shelter.shelter_description || `${shelter.shelter_name} is a dedicated animal welfare organization located in ${shelter.shelter_address}. Our mission is to provide a safe haven for animals in need and facilitate successful adoptions into loving forever homes.`}
+                                        {shelter.shelter_description || `${shelter.shelter_name} is a dedicated animal welfare organization${shelter.shelter_address ? ` located in ${shelter.shelter_address}` : ''}. Our mission is to provide a safe haven for animals in need and facilitate successful adoptions into loving forever homes.`}
                                     </p>
                                 </div>
                             </section>
@@ -155,7 +155,7 @@ export default function ShelterProfilePage() {
                                 </Card>
                                 <Card className="p-4 text-center border-none bg-indigo-500/5">
                                     <MapPin className="w-6 h-6 text-indigo-500 mx-auto mb-2" />
-                                    <p className="text-lg font-bold text-indigo-500 truncate">{shelter.shelter_address.split(',')[0]}</p>
+                                    <p className="text-lg font-bold text-indigo-500 truncate">{shelter.shelter_address?.split(',')[0] || 'N/A'}</p>
                                     <p className="text-xs text-muted-foreground uppercase font-semibold">Location</p>
                                 </Card>
                             </div>
@@ -163,42 +163,83 @@ export default function ShelterProfilePage() {
                             {/* Available Pets Grid */}
                             <section>
                                 <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-2xl font-bold">Currently Available Pets</h2>
+                                    <h2 className="text-2xl font-bold">Our Pets</h2>
                                     <Button variant="ghost" asChild>
                                         <Link href="/matches?browse=all">View All <ExternalLink className="w-4 h-4 ml-2" /></Link>
                                     </Button>
                                 </div>
 
                                 {pets.length > 0 ? (
-                                    <div className="grid sm:grid-cols-2 gap-6">
-                                        {pets.map((pet) => (
-                                            <Card key={pet.id} className="overflow-hidden group hover:shadow-lg transition-all border-muted/30">
-                                                <div className="relative aspect-[4/3] overflow-hidden">
-                                                    <img
-                                                        src={pet.image_url || "/placeholder.svg"}
-                                                        alt={pet.name}
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                    />
-                                                    {pet.is_foster && (
-                                                        <Badge className="absolute top-3 left-3 bg-orange-500 text-white border-none">Foster-to-Adopt</Badge>
-                                                    )}
-                                                </div>
-                                                <div className="p-4">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h3 className="text-lg font-bold text-foreground">{pet.name}</h3>
-                                                        <Badge variant="outline">{pet.breed}</Badge>
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {pets.map((pet) => {
+                                            // Determine status styling and label
+                                            let statusConfig = {
+                                                color: "bg-blue-100 text-blue-700 border-blue-200",
+                                                label: "Available"
+                                            };
+
+                                            if (pet.status === 'adopted') {
+                                                statusConfig = { color: "bg-green-100 text-green-700 border-green-200", label: "Adopted" };
+                                            } else if (pet.status === 'pending') {
+                                                statusConfig = { color: "bg-amber-100 text-amber-700 border-amber-200", label: "Pending" };
+                                            } else if (pet.is_foster) {
+                                                statusConfig = { color: "bg-purple-100 text-purple-700 border-purple-200", label: "Foster / Adopt" };
+                                            }
+
+                                            return (
+                                                <div key={pet.id} className="group flex bg-white border border-border rounded-xl overflow-hidden hover:shadow-lg hover:border-primary/20 transition-all duration-300 h-32 md:h-36">
+                                                    {/* Image Section */}
+                                                    <div className="w-1/3 max-w-[150px] relative overflow-hidden bg-muted">
+                                                        <img
+                                                            src={pet.image_url || "/placeholder.svg"}
+                                                            alt={pet.name}
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                                        />
+                                                        {pet.is_foster && pet.status === 'available' && (
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-purple-500/90 text-white text-[10px] uppercase font-bold text-center py-1 backdrop-blur-sm">
+                                                                Foster Care
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                                                        <span>{pet.age}</span>
-                                                        <span>•</span>
-                                                        <span>{pet.gender}</span>
+
+                                                    {/* Details Section */}
+                                                    <div className="flex-1 p-4 flex flex-col justify-between min-w-0 bg-card">
+                                                        <div>
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div>
+                                                                    <h3 className="font-bold text-lg text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                                                                        {pet.name}
+                                                                    </h3>
+                                                                    <p className="text-sm font-medium text-muted-foreground line-clamp-1">
+                                                                        {pet.breed}
+                                                                    </p>
+                                                                </div>
+                                                                <Badge variant="outline" className={`shrink-0 ${statusConfig.color} border font-semibold`}>
+                                                                    {statusConfig.label}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-end justify-between mt-2">
+                                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-medium">
+                                                                <span className="flex items-center gap-1 bg-muted px-2 py-1 rounded-md">
+                                                                    {pet.age}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 bg-muted px-2 py-1 rounded-md">
+                                                                    {pet.gender}
+                                                                </span>
+                                                            </div>
+
+                                                            <Button size="sm" variant="default" className="h-8 text-xs font-semibold px-4 shadow-sm" asChild>
+                                                                <Link href={`/pet/${pet.id}`}>
+                                                                    View Details
+                                                                </Link>
+                                                            </Button>
+                                                        </div>
                                                     </div>
-                                                    <Button className="w-full" variant="outline" asChild>
-                                                        <Link href={`/pet/${pet.id}`}>Meet {pet.name}</Link>
-                                                    </Button>
                                                 </div>
-                                            </Card>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="text-center py-12 bg-muted/20 rounded-2xl border border-dashed">
@@ -222,7 +263,7 @@ export default function ShelterProfilePage() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-semibold text-foreground">Visit Address</p>
-                                            <p className="text-sm text-muted-foreground">{shelter.shelter_address}</p>
+                                            <p className="text-sm text-muted-foreground">{shelter.shelter_address || 'Not provided'}</p>
                                         </div>
                                     </div>
 
@@ -232,7 +273,7 @@ export default function ShelterProfilePage() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-semibold text-foreground">Phone Number</p>
-                                            <p className="text-sm text-muted-foreground">{shelter.phone_number}</p>
+                                            <p className="text-sm text-muted-foreground">{shelter.phone_number || 'Not provided'}</p>
                                         </div>
                                     </div>
 
@@ -242,7 +283,7 @@ export default function ShelterProfilePage() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-semibold text-foreground">Email Address</p>
-                                            <p className="text-sm text-muted-foreground">{shelter.email}</p>
+                                            <p className="text-sm text-muted-foreground">{shelter.email || 'Not provided'}</p>
                                         </div>
                                     </div>
 

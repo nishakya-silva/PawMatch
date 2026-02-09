@@ -12,7 +12,7 @@ import { MessageSquare, Calendar, User, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default function UserMessagesPage() {
-    const { user, token, isLoading } = useAuth()
+    const { user, token, isLoading, refreshUser } = useAuth()
     const router = useRouter()
     const [messages, setMessages] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
@@ -39,6 +39,18 @@ export default function UserMessagesPage() {
             const data = await res.json()
             if (data.success) {
                 setMessages(data.messages)
+                // Mark notifications as read
+                fetch("http://localhost:5000/api/notifications/read", {
+                    method: 'PUT',
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-auth-token": token || ""
+                    },
+                    body: JSON.stringify({ type: 'message' })
+
+                }).then(() => {
+                    if (user) refreshUser({ ...user, unread_messages: 0 });
+                }).catch(err => console.error("Error marking read:", err));
             }
         } catch (error) {
             console.error("Error fetching messages:", error)

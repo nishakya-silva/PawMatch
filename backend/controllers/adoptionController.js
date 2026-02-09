@@ -141,7 +141,7 @@ exports.approveAdoption = async (req, res) => {
 
             // Update Adoption Status
             await connection.query(
-                "UPDATE adoptions SET status = 'active' WHERE id = ?",
+                "UPDATE adoptions SET status = 'active', is_status_read = 0 WHERE id = ?",
                 [adoptionId]
             );
 

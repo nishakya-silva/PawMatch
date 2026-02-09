@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAuth } from "@/components/providers/auth-provider"
 
 const PetCard = ({ pet, showCompatibility, favorites, toggleFavorite }: { pet: any, showCompatibility: boolean, favorites: number[], toggleFavorite: (id: number) => void }) => (
   <div className="bg-card border border-border rounded-2xl overflow-hidden group hover:shadow-lg transition-shadow">
@@ -112,9 +113,12 @@ export function MatchesGrid() {
   const [hasQuizResults, setHasQuizResults] = useState(false)
   const searchParams = useSearchParams()
   const browseAll = searchParams.get('browse') === 'all'
+  const { user, isLoading: isAuthLoading } = useAuth()
   const [activeTab, setActiveTab] = useState(browseAll ? "all" : "matches")
 
   useEffect(() => {
+    if (isAuthLoading) return;
+
     const fetchMatches = async () => {
       try {
         // Always fetch all available pets from the database
@@ -131,8 +135,13 @@ export function MatchesGrid() {
 
         const storedMatches = localStorage.getItem('pawmatch_matches')
         const quizTimestamp = localStorage.getItem('pawmatch_quiz_timestamp')
+        const storedUserId = localStorage.getItem('pawmatch_quiz_user_id') || ''
 
-        if (storedMatches && quizTimestamp) {
+        // Strict validation: localStorage user ID must match current user ID (or both empty for guest)
+        const currentUserId = user ? user.id.toString() : ''
+        const canUseQuiz = storedUserId === currentUserId
+
+        if (storedMatches && quizTimestamp && canUseQuiz) {
           const timestamp = parseInt(quizTimestamp)
           const oneHourInMs = 60 * 60 * 1000 // 1 hour
           const now = Date.now()
@@ -158,6 +167,7 @@ export function MatchesGrid() {
             // Quiz results expired, clear them
             localStorage.removeItem('pawmatch_matches')
             localStorage.removeItem('pawmatch_quiz_timestamp')
+            localStorage.removeItem('pawmatch_quiz_user_id')
           }
         }
 
@@ -209,7 +219,7 @@ export function MatchesGrid() {
       }
     }
     fetchMatches()
-  }, [])
+  }, [user, isAuthLoading])
 
   const toggleFavorite = (id: number) => {
     setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
@@ -303,7 +313,7 @@ export function MatchesGrid() {
                   .filter(p => !hasQuizResults || p.compatibility >= 70)
                   .sort((a, b) => b.compatibility - a.compatibility)
                   .map((pet) => (
-                    <PetCard key={pet.id} pet={pet} showCompatibility={true} favorites={favorites} toggleFavorite={toggleFavorite} />
+                    <PetCard key={pet.id} pet={pet} showCompatibility={hasQuizResults} favorites={favorites} toggleFavorite={toggleFavorite} />
                   ))}
               </div>
             ) : (

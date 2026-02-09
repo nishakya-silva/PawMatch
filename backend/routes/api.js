@@ -17,12 +17,14 @@ router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/verify', authController.verifyEmail);
 router.post('/resend-otp', authController.resendOTP);
+router.post('/validate-nic', authController.validateNIC);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.get('/me', auth, authController.getMe);
 router.put('/profile', auth, authController.updateProfile);
 router.put('/update-password', auth, authController.updatePassword);
 router.put('/notifications', auth, authController.updateNotifications);
+router.put('/notifications/read', auth, authController.markNotificationsRead);
 router.delete('/account', auth, authController.deleteAccount);
 router.get('/logs', auth, authController.getActivityLogs);
 router.get('/achievements', auth, achievementController.getUserAchievements);
@@ -80,6 +82,7 @@ router.get('/shelter/messages', auth, shelterController.getShelterMessages);
 router.post('/shelter/message/respond', auth, shelterController.respondToMessage);
 router.get('/shelter/potential-matches', auth, shelterController.getPotentialMatches);
 router.get('/user/messages', auth, shelterController.getUserMessages);
+router.get('/shelter/pets', auth, shelterController.getShelterPets);
 router.get('/shelter/public/:id', shelterController.getShelterPublicProfile);
 
 // Report Routes

@@ -25,6 +25,8 @@ export function Navigation() {
     logout()
   }
 
+  const hasNotifications = user && ((user.unread_messages || 0) + (user.pending_applications || 0) > 0);
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -70,10 +72,13 @@ export function Navigation() {
                 {/* User Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full">
+                    <button className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-full relative">
                       <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer">
                         {user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
                       </div>
+                      {hasNotifications && (
+                        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-background" />
+                      )}
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -85,9 +90,12 @@ export function Navigation() {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href={user.role === 'shelter' ? "/shelters/dashboard" : user.role === 'admin' ? "/admin/dashboard" : "/profile"} className="cursor-pointer">
+                      <Link href={user.role === 'shelter' ? "/shelters/dashboard" : user.role === 'admin' ? "/admin/dashboard" : "/profile"} className="cursor-pointer w-full flex items-center">
                         <UserIcon className="w-4 h-4 mr-2" />
                         {user.role === 'adopter' ? 'My Profile' : 'Dashboard'}
+                        {hasNotifications && user.role === 'shelter' && (
+                          <span className="ml-auto w-2 h-2 bg-red-500 rounded-full" />
+                        )}
                       </Link>
                     </DropdownMenuItem>
                     {user?.role === 'adopter' && (

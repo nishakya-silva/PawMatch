@@ -164,6 +164,7 @@ export function QuizFlow() {
       if (data.success) {
         localStorage.setItem('pawmatch_matches', JSON.stringify(data.matches))
         localStorage.setItem('pawmatch_quiz_timestamp', Date.now().toString())
+        localStorage.setItem('pawmatch_quiz_user_id', user ? user.id.toString() : '');
         setIsComplete(true)
       } else {
         setIsComplete(true)
@@ -218,7 +219,7 @@ export function QuizFlow() {
         <div className="mb-8">
           <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
             <span>
-              Question {currentStep + 1} of {quizQuestions.length}
+              Question {currentStep + 1} of {activeQuestions.length}
             </span>
             <span>{Math.round(progress)}% complete</span>
           </div>
@@ -277,7 +278,7 @@ export function QuizFlow() {
                 </>
               ) : (
                 <>
-                  {currentStep === quizQuestions.length - 1 ? "Complete Quiz" : "Next"}
+                  {currentStep === activeQuestions.length - 1 ? "Complete Quiz" : "Next"}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </>
               )}
