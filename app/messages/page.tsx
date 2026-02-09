@@ -33,7 +33,7 @@ export default function UserMessagesPage() {
         try {
             const res = await fetch("http://localhost:5000/api/user/messages", {
                 headers: {
-                    "x-auth-token": token || ""
+                    "Authorization": `Bearer ${token}`
                 }
             })
             const data = await res.json()
@@ -44,7 +44,7 @@ export default function UserMessagesPage() {
                     method: 'PUT',
                     headers: {
                         "Content-Type": "application/json",
-                        "x-auth-token": token || ""
+                        "Authorization": `Bearer ${token}`
                     },
                     body: JSON.stringify({ type: 'message' })
 

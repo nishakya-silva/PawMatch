@@ -13,7 +13,7 @@ import { useAuth } from "@/components/providers/auth-provider"
 
 export default function AdminDashboardPage() {
     const router = useRouter()
-    // In real app, verify admin role in layout or middleware
+    const { token, user, isLoading: authLoading } = useAuth()
     const [pendingShelters, setPendingShelters] = useState<any[]>([])
     const [allShelters, setAllShelters] = useState<any[]>([])
     const [adoptions, setAdoptions] = useState<any[]>([])
@@ -23,7 +23,14 @@ export default function AdminDashboardPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [activeTab, setActiveTab] = useState("overview")
 
-    const { token, isLoading: authLoading } = useAuth()
+    // Auth guard
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push('/login')
+        } else if (!authLoading && user?.role !== 'admin') {
+            router.push('/')
+        }
+    }, [user, authLoading, router])
 
     const fetchData = async () => {
         if (!token) return
@@ -139,6 +146,10 @@ export default function AdminDashboardPage() {
                 </div>
             </div>
         )
+    }
+
+    if (!user || user.role !== 'admin') {
+        return null
     }
 
     return (

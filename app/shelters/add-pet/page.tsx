@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Navigation } from "@/components/ui/navigation"
 import { Footer } from "@/components/ui/footer"
@@ -15,8 +15,24 @@ import { useAuth } from "@/components/providers/auth-provider"
 
 export default function AddPetPage() {
     const router = useRouter()
-    const { user } = useAuth()
+    const { user, isLoading: authLoading } = useAuth()
     const [isLoading, setIsLoading] = useState(false)
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push('/shelters/signin')
+        } else if (!authLoading && user?.role !== 'shelter') {
+            router.push('/')
+        }
+    }, [user, authLoading, router])
+
+    if (authLoading) {
+        return <div className="min-h-screen flex items-center justify-center bg-muted/30">Loading...</div>
+    }
+
+    if (!user || user.role !== 'shelter') {
+        return null
+    }
     const [imagePreview, setImagePreview] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         name: "",

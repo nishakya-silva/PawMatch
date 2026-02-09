@@ -23,16 +23,15 @@ export default function HomePage() {
         router.replace('/admin/dashboard')
       } else if (user.role === 'shelter') {
         router.replace('/shelters/dashboard')
+      } else if (user.role === 'user') {
+        router.replace('/dashboard')
       }
     }
   }, [user, isLoading, router])
 
-  // Optional: Return null or a loader if redirecting to prevent flash
-  // For now, we render the home page while checking, to support SEO bots (who won't have user auth)
-  // and to provide a fallback. If the flash is annoying, we can return null if user.role is shelter/admin.
-
-  if (user?.role === 'shelter' || user?.role === 'admin') {
-    return <div className="min-h-screen bg-background" /> // Empty screen while redirecting
+  // Show empty screen while redirecting for logged-in users
+  if (!isLoading && user) {
+    return <div className="min-h-screen bg-background" /> 
   }
 
   return (
