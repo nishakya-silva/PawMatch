@@ -9,10 +9,12 @@ export default function FosterToAdoptPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <FosterHeroSection />
-      <FosterBenefitsSection />
-      <FosterProcessSection />
-      <FosterPetsSection />
+      <main className="pt-16">
+        <FosterHeroSection />
+        <FosterBenefitsSection />
+        <FosterProcessSection />
+        <FosterPetsSection />
+      </main>
       <Footer />
     </div>
   )

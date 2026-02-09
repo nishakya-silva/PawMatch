@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Navigation } from "@/components/ui/navigation"
 import { Footer } from "@/components/ui/footer"
 import { Button } from "@/components/ui/button"
@@ -15,7 +16,8 @@ import { VerifyShelterCard } from "@/components/shelters/verify-shelter-card"
 import { EditPetDialog } from "@/components/shelters/edit-pet-dialog"
 
 export default function ShelterDashboardPage() {
-    const { user, refreshUser } = useAuth()
+    const { user, refreshUser, isLoading: authLoading } = useAuth()
+    const router = useRouter()
     const [verificationStatus, setVerificationStatus] = useState<string>('unverified')
     const [pets, setPets] = useState<any[]>([])
     const [messages, setMessages] = useState<any[]>([])
@@ -29,6 +31,15 @@ export default function ShelterDashboardPage() {
     // Edit state
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
     const [selectedPet, setSelectedPet] = useState<any>(null)
+
+    // Auth guard
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push('/shelters/signin')
+        } else if (!authLoading && user?.role !== 'shelter') {
+            router.push('/')
+        }
+    }, [user, authLoading, router])
 
     // Sync validation status from user object or fetch fresh
     useEffect(() => {
@@ -196,6 +207,14 @@ export default function ShelterDashboardPage() {
             // Fallback for plain strings (legacy/mock data)
             return 'N/A';
         }
+    }
+
+    if (authLoading) {
+        return <div className="min-h-screen flex items-center justify-center bg-muted/30">Loading...</div>
+    }
+
+    if (!user || user.role !== 'shelter') {
+        return null
     }
 
     return (
